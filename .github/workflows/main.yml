@@ -1,0 +1,42 @@
+name: test
+on: [push, pull_request]
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4.1.0
+        with:
+          python-version: 3
+
+      - name: Install flake8
+        run: pip --disable-pip-version-check install flake8
+
+      - name: Lint with flake8
+        run: flake8 --count
+    
+  # test:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v3
+  
+  #     - name: Set up Python
+  #       uses: actions/setup-python@v4.1.0
+  #       with:
+  #         python-version: 3
+  
+  #     - name: Install poetry
+  #       run: pip install poetry
+  
+  #     - name: Install dependencies
+  #       run: |
+  #         poetry config virtualenvs.in-project true
+  #         poetry install
+  #         sudo apt-get install libsndfile1 libsndfile1-dev
+        
+  #     - name: Test
+  #       run: poetry run python tests/tests.py

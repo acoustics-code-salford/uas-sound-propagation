@@ -1,0 +1,25 @@
+[tool.poetry]
+name = "uassoundevent"
+version = "0.1.0"
+description = "Render movement events from static UAS hover recordings"
+authors = ["Marc Green <marc1701@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<3.13"
+resampy = "^0.4.2"
+numpy = "^1.18.0"
+soundfile = "^0.12.1"
+scipy = "^1.11.3"
+
+[tool.poetry.group.dev.dependencies]
+matplotlib = "^3.8.0"
+ipython = "^8.16.1"
+colorednoise = "^2.1.0"
+ipykernel = "^6.25.2"
+sounddevice = "^0.4.6"
+flake8 = "^6.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
