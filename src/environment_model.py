@@ -1,4 +1,3 @@
-from typing import Any
 import numpy as np
 
 
@@ -60,7 +59,7 @@ class UASEventRenderer():
         self._reflection_amplitude = amp
         if hasattr(self, 'flight_parameters'):
             self._setup_paths()
-    
+
     @property
     def flight_parameters(self):
         return self._flight_parameters
