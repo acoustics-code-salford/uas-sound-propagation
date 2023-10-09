@@ -143,14 +143,13 @@ class PropagationPath():
         y_distances -= receiver_height
 
         self.hyp_distances = np.linalg.norm(
-            [[x_i, y_i] for x_i, y_i in zip(x_distances, y_distances)],
-            axis=1
+            np.array([x_distances, y_distances]).T, axis=1
         )
 
-        self.calc_delays()
-        self.calc_amplitudes()
+        self._calc_delays()
+        self._calc_amplitudes()
 
-    def calc_delays(self):
+    def _calc_delays(self):
         # delay times uncorrected for source movement
         self.straight_time_delays = self.hyp_distances/self.c
 
@@ -160,12 +159,12 @@ class PropagationPath():
         t_steps = t_steps[:len(self.straight_time_delays)]
 
         # calculate tau (emission time)
-        tau, self.tau_x_ax = self.calc_tau(t_steps)
+        tau, self.tau_x_ax = self._calc_tau(t_steps)
 
         # correct delays for source movement
         self.delays = self.straight_time_delays[tau] * self.fs
 
-    def calc_tau(self, t_steps):
+    def _calc_tau(self, t_steps):
         # tau calcaulated as per Rizzi/Sullivan
         tau = ((t_steps - self.straight_time_delays) * self.fs).astype(int)
         tau_x_ax = np.where(tau > 0)[0]
@@ -173,7 +172,7 @@ class PropagationPath():
 
         return tau, tau_x_ax
 
-    def calc_amplitudes(self):
+    def _calc_amplitudes(self):
         # calculate R_tau
         tau_shifted_distances = (self.delays / self.fs) * self.c
 
