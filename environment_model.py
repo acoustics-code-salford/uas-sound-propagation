@@ -10,18 +10,18 @@ class UASEventRenderer():
             direct_amplitude=1.0,
             reflection_amplitude=0.2
             ) -> None:
-        
+
         self.fs = fs
         self.flight_parameters = flight_parameters
         self.receiver_height = receiver_height
         self.direct_amplitude = direct_amplitude
         self.reflection_amplitude = reflection_amplitude
-        # TODO: make propagation parameters editable 
-        # (presently path calculations will not change if flight parameters 
+        #  TODO: make propagation parameters editable
+        # (presently path calculations will not change if flight parameters
         # are altered after init)
 
         self.direct_path = PropagationPath(
-            self.x_positions, 
+            self.x_positions,
             self.y_positions,
             self.direct_amplitude,
             self.fs,
@@ -52,7 +52,7 @@ class UASEventRenderer():
     @property
     def flight_parameters(self):
         return self._flight_parameters
-    
+
     @flight_parameters.setter
     def flight_parameters(self, params):
         self.x_positions = np.empty(0)
@@ -62,7 +62,7 @@ class UASEventRenderer():
             x_next, y_next = self._xy_over_time(*p)
             self.x_positions = np.append(self.x_positions, x_next)
             self.y_positions = np.append(self.y_positions, y_next)
-        
+
         self._flight_parameters = params
 
     def _xy_over_time(self, start, end, speed_ramp):
@@ -189,7 +189,7 @@ class PropagationPath():
         doppler_out = np.zeros(len(signal) + self.fs)
 
         # split delays into whole and fractional parts
-        # linear interpolation requires oversampling to avoid 
+        # linear interpolation requires oversampling to avoid
         # excessive aliasing
         # TODO: implement more sophisticated interpolation
         whole_sample_delays = np.floor(self.delays).astype(int)
