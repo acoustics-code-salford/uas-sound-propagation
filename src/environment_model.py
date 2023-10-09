@@ -1,3 +1,4 @@
+from typing import Any
 import numpy as np
 
 
@@ -12,29 +13,10 @@ class UASEventRenderer():
             ) -> None:
 
         self.fs = fs
-        self.flight_parameters = flight_parameters
         self.receiver_height = receiver_height
         self.direct_amplitude = direct_amplitude
         self.reflection_amplitude = reflection_amplitude
-        #  TODO: make propagation parameters editable
-        # (presently path calculations will not change if flight parameters
-        # are altered after init)
-
-        self.direct_path = PropagationPath(
-            self.x_positions,
-            self.y_positions,
-            self.direct_amplitude,
-            self.fs,
-            self.receiver_height
-        )
-
-        self.ground_reflection = PropagationPath(
-            self.x_positions,
-            -self.y_positions,
-            self.reflection_amplitude,
-            self.fs,
-            self.receiver_height
-        )
+        self.flight_parameters = flight_parameters
 
     def render(self, signal):
         # apply each propagation path to input signal
@@ -50,20 +32,69 @@ class UASEventRenderer():
         return direct
 
     @property
+    def receiver_height(self):
+        return self._receiver_height
+
+    @receiver_height.setter
+    def receiver_height(self, height):
+        self._receiver_height = height
+        if hasattr(self, 'flight_parameters'):
+            self._setup_paths()
+
+    @property
+    def direct_amplitude(self):
+        return self._direct_amplitude
+
+    @direct_amplitude.setter
+    def direct_amplitude(self, amp):
+        self._direct_amplitude = amp
+        if hasattr(self, 'flight_parameters'):
+            self._setup_paths()
+
+    @property
+    def reflection_amplitude(self):
+        return self._reflection_amplitude
+
+    @reflection_amplitude.setter
+    def reflection_amplitude(self, amp):
+        self._reflection_amplitude = amp
+        if hasattr(self, 'flight_parameters'):
+            self._setup_paths()
+    
+    @property
     def flight_parameters(self):
         return self._flight_parameters
 
     @flight_parameters.setter
     def flight_parameters(self, params):
-        self.x_positions = np.empty(0)
-        self.y_positions = np.empty(0)
+        self._x_positions = np.empty(0)
+        self._y_positions = np.empty(0)
 
         for p in params:
             x_next, y_next = self._xy_over_time(*p)
-            self.x_positions = np.append(self.x_positions, x_next)
-            self.y_positions = np.append(self.y_positions, y_next)
+            self._x_positions = np.append(self._x_positions, x_next)
+            self._y_positions = np.append(self._y_positions, y_next)
 
+        self._setup_paths()
         self._flight_parameters = params
+
+    def _setup_paths(self):
+        # set up direct and reflected paths
+        self.direct_path = PropagationPath(
+            self._x_positions,
+            self._y_positions,
+            self.direct_amplitude,
+            self.fs,
+            self.receiver_height
+        )
+
+        self.ground_reflection = PropagationPath(
+            self._x_positions,
+            -self._y_positions,
+            self.reflection_amplitude,
+            self.fs,
+            self.receiver_height
+        )
 
     def _xy_over_time(self, start, end, speed_ramp):
         t_interval = 1/self.fs
