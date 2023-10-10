@@ -18,7 +18,7 @@ def load_params(csv_file):
         skiprows=1,
         usecols=np.arange(1, 4),
         dtype='str'
-    )
+    ).reshape(-1, 3)  # reshape in case of single-event flight
 
     params = np.zeros((*str_params.shape, 2))
     for i, row in enumerate(str_params):
