@@ -1,0 +1,2 @@
+segment, startxy, endxy, speeds
+constant-speed flyby, -200 30, 200 30, 30 30
