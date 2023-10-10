@@ -1,4 +1,5 @@
 import numpy as np
+from .interpolators import lagrange
 
 
 class UASEventRenderer():
@@ -191,7 +192,7 @@ class PropagationPath():
         # calculate tau (emission time)
         tau, self.tau_x_ax = self._calc_tau(t_steps)
 
-        # correct delays for source movement
+        # correct delays for source movement, converted to samples
         self.delays = self.straight_time_delays[tau] * self.fs
 
     def _calc_tau(self, t_steps):
@@ -214,24 +215,8 @@ class PropagationPath():
 
         self.amp_env = inv_sqr_amplitudes
 
-    def apply_doppler(self, signal):
-        # establish output array - leave extra second at end for delay
-        doppler_out = np.zeros(len(signal) + self.fs)
-
-        # split delays into whole and fractional parts
-        # linear interpolation requires oversampling to avoid
-        # excessive aliasing
-        # TODO: implement more sophisticated interpolation
-        whole_sample_delays = np.floor(self.delays).astype(int)
-        fractional_delays = np.mod(self.delays, 1)
-
-        for i, sample in enumerate(signal[:-1]):
-            next_sample = signal[i + 1]
-            doppler_out[i + whole_sample_delays[i]] = (
-                sample * (fractional_delays[i])
-                + next_sample * (1 - fractional_delays[i])
-            )
-
+    def apply_doppler(self, signal, interpolator=lagrange):
+        doppler_out = interpolator(signal, self.delays, self.fs)
         return doppler_out
 
     def apply_amp_env(self, signal):
