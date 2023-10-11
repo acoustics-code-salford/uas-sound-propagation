@@ -1,5 +1,6 @@
 import numpy as np
-from .interpolators import linear
+from scipy import signal
+import interpolators
 
 
 class UASEventRenderer():
@@ -18,15 +19,27 @@ class UASEventRenderer():
         self.reflection_amplitude = reflection_amplitude
         self.flight_parameters = flight_parameters
 
-    def render(self, signal):
+    def render(self, x):
         # apply each propagation path to input signal
-        direct = self.direct_path.process(signal)
-        reflection = self.ground_reflection.process(signal)
+        direct = self.direct_path.process(x)
+        reflection = self.ground_reflection.process(x)
 
         # in samples
-        # reflection_offset = (self.ground_reflection.init_delay
-        #                      - self.direct_path.init_delay)
+        offset = (self.ground_reflection.init_delay
+                  - self.direct_path.init_delay)
+        whole_offset = np.round(offset).astype(int)
+        frac_offset = (
+            -(-offset % 1) 
+            if np.round(offset).astype(int) > offset
+            else offset % 1
+        )
 
+        h = interpolators.sinc_fractional_delay_filter(frac_offset)
+
+        reflection = np.concatenate((np.zeros(whole_offset), reflection))
+        reflection = signal.fftconvolve(reflection, h, 'same')[:-whole_offset]
+        self.d = direct
+        self.r = reflection
         return direct + reflection
 
     @property
@@ -181,7 +194,7 @@ class PropagationPath():
         self.amp_env = 1 / (self.hyp_distances**2)
         self.amp_env /= max(self.amp_env) / self.max_amp
 
-    def apply_doppler(self, x, interpolate=linear):
+    def apply_doppler(self, x, interpolate=interpolators.linear):
         # init output array and initial read position
         out = np.zeros(len(self.delta_delays) + 1)
         read_pointer = 0
@@ -198,13 +211,13 @@ class PropagationPath():
 
         return out
 
-    def apply_amp_env(self, signal):
-        return signal * self.amp_env
+    def apply_amp_env(self, x):
+        return x * self.amp_env
 
-    def process(self, signal):
-        if len(signal) < len(self.hyp_distances):
+    def process(self, x):
+        if len(x) < len(self.hyp_distances):
             raise ValueError('Input signal shorter than path to be rendered')
 
         return self.apply_amp_env(
-            self.apply_doppler(signal)
+            self.apply_doppler(x)
         )
