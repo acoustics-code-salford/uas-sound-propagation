@@ -29,7 +29,7 @@ class UASEventRenderer():
                   - self.direct_path.init_delay)
         whole_offset = np.round(offset).astype(int)
         frac_offset = (
-            -(-offset % 1) 
+            -(-offset % 1)
             if np.round(offset).astype(int) > offset
             else offset % 1
         )
