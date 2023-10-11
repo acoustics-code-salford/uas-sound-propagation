@@ -1,5 +1,5 @@
 import numpy as np
-from .interpolators import linear, lagrange
+from .interpolators import linear
 
 
 class UASEventRenderer():
@@ -24,8 +24,8 @@ class UASEventRenderer():
         reflection = self.ground_reflection.process(signal)
 
         # in samples
-        reflection_offset = (self.ground_reflection.init_delay
-                              - self.direct_path.init_delay)
+        # reflection_offset = (self.ground_reflection.init_delay
+        #                      - self.direct_path.init_delay)
 
         return direct + reflection
 
@@ -173,7 +173,7 @@ class PropagationPath():
         self.hyp_distances = np.linalg.norm(
             np.array([x_distances, y_distances]).T, axis=1
         )
-        
+
         # calculate delays and amplitude curve
         delays = (self.hyp_distances / self.c) * self.fs
         self.init_delay = delays[0]
@@ -183,12 +183,11 @@ class PropagationPath():
 
     def apply_doppler(self, x, interpolate=linear):
         # init output array and initial read position
-        
         out = np.zeros(len(self.delta_delays) + 1)
         read_pointer = 0
-        
+
         for i in range(len(out)):
-            
+
             n = int(read_pointer)  # whole part
             s = read_pointer % 1  # fractional part
 
