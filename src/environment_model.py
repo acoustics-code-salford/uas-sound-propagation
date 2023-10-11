@@ -1,5 +1,5 @@
 import numpy as np
-from .interpolators import lagrange
+from .interpolators import linear, lagrange
 
 
 class UASEventRenderer():
@@ -22,6 +22,11 @@ class UASEventRenderer():
         # apply each propagation path to input signal
         direct = self.direct_path.process(signal)
         reflection = self.ground_reflection.process(signal)
+
+        # in samples
+        reflection_offset = (self.ground_reflection.init_delay
+                              - self.direct_path.init_delay)
+
         return direct + reflection
 
     @property
@@ -170,14 +175,29 @@ class PropagationPath():
         )
         
         # calculate delays and amplitude curve
-        self.delays = (self.hyp_distances / self.c) * self.fs
+        delays = (self.hyp_distances / self.c) * self.fs
+        self.init_delay = delays[0]
+        self.delta_delays = np.diff(delays)
         self.amp_env = 1 / (self.hyp_distances**2)
         self.amp_env /= max(self.amp_env) / self.max_amp
 
+    def apply_doppler(self, x, interpolate=linear):
+        # init output array and initial read position
+        
+        out = np.zeros(len(self.delta_delays) + 1)
+        read_pointer = 0
+        
+        for i in range(len(out)):
+            
+            n = int(read_pointer)  # whole part
+            s = read_pointer % 1  # fractional part
 
-    def apply_doppler(self, signal, interpolator=lagrange):
-        doppler_out = interpolator(signal, self.delays, self.fs)
-        return doppler_out
+            # replace this with call to interpolator
+            out[i] = interpolate(x, n, s)
+
+            read_pointer += (1 - self.delta_delays[i-1])
+
+        return out
 
     def apply_amp_env(self, signal):
         return signal * self.amp_env
@@ -186,8 +206,6 @@ class PropagationPath():
         if len(signal) < len(self.hyp_distances):
             raise ValueError('Input signal shorter than path to be rendered')
 
-        return self.apply_doppler(
-            self.apply_amp_env(
-                signal[:len(self.delays)]
-            )
+        return self.apply_amp_env(
+            self.apply_doppler(signal)
         )
