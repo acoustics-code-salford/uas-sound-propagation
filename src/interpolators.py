@@ -1,48 +1,25 @@
 import numpy as np
 
 
-def linear(x, delays, fs):
+def sinc_fractional_delay_filter(frac, filt_length=35):
+    n = np.arange(filt_length)
+    # calculate sinc
+    h = np.sinc(n - ((filt_length - 1) / 2) - frac)
+    # window the sinc
+    h *= np.blackman(filt_length)
+    # normalise for unity gain
+    h /= np.sum(h)
 
-    # calculate 'backward' delay times relative to receiver
-    time, D_time = np.array(
-        [
-            [i, i - delays[t]]
-            for t, i in enumerate(
-                range(int(delays[0])+1, len(delays)-1)
-            )
-        ]
-    ).T
-
-    time = time.astype(int)
-    whole = D_time.astype(int)
-    frac = np.mod(D_time, 1)
-    out = np.zeros(len(x) + fs)  # leave extra second at end
-
-    for t, n, s in zip(time, whole, frac):
-        # one-multiply linear interpolation (J. O. Smith)
-        out[t] = x[n] + (s * (x[n+1] - x[n]))
-
-    return out
+    return h
 
 
-def lagrange(x, delays, fs):
-    time, D_time = np.array(
-        [
-            [i, i - delays[t]]
-            for t, i in enumerate(
-                range(int(delays[0])+1, len(delays)-1)
-            )
-        ]
-    ).T
+def linear(x, n, s):
+    return x[n] + (s * (x[n+1] - x[n]))
 
-    time = time.astype(int)
-    whole = D_time.astype(int)
-    frac = np.mod(D_time, 1)
-    out = np.zeros(len(x) + fs)
 
-    for t, n, s in zip(time, whole, frac):
-        out[t] = (
-            (x[n + 1] * ((s * (1 + s)) / 2)) + (x[n] * (1 + s) * (1 - s))
-            + x[n - 1] * ((-s) * ((1 - s) / 2))
-        )
-    return out
+def lagrange(x, n, s):
+    return (
+        (x[n + 1] * ((s * (1 + s)) / 2))
+        + (x[n] * (1 + s) * (1 - s))
+        + x[n - 1] * ((-s) * ((1 - s) / 2))
+    )

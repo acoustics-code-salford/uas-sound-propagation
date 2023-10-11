@@ -1,5 +1,6 @@
 import numpy as np
-from .interpolators import lagrange
+from scipy import signal
+import interpolators
 
 
 class UASEventRenderer():
@@ -18,18 +19,28 @@ class UASEventRenderer():
         self.reflection_amplitude = reflection_amplitude
         self.flight_parameters = flight_parameters
 
-    def render(self, signal):
+    def render(self, x):
         # apply each propagation path to input signal
-        direct = self.direct_path.process(signal)
-        reflection = self.ground_reflection.process(signal)
+        direct = self.direct_path.process(x)
+        reflection = self.ground_reflection.process(x)
 
-        # calculate offset between paths
-        delay_offset = (
-            self.ground_reflection.tau_x_ax[0] - self.direct_path.tau_x_ax[0]
+        # in samples
+        offset = (self.ground_reflection.init_delay
+                  - self.direct_path.init_delay)
+        whole_offset = np.round(offset).astype(int)
+        frac_offset = (
+            -(-offset % 1)
+            if np.round(offset).astype(int) > offset
+            else offset % 1
         )
-        # combine direct and ground reflection path signals
-        direct[delay_offset:] += reflection
-        return direct
+
+        h = interpolators.sinc_fractional_delay_filter(frac_offset)
+
+        reflection = np.concatenate((np.zeros(whole_offset), reflection))
+        reflection = signal.fftconvolve(reflection, h, 'same')[:-whole_offset]
+        self.d = direct
+        self.r = reflection
+        return direct + reflection
 
     @property
     def receiver_height(self):
@@ -169,7 +180,6 @@ class PropagationPath():
         self.max_amp = max_amp
         self.c = c
         self.fs = fs
-        self.t_interval = 1/fs
 
         y_distances -= receiver_height
 
@@ -177,57 +187,37 @@ class PropagationPath():
             np.array([x_distances, y_distances]).T, axis=1
         )
 
-        self._calc_delays()
-        self._calc_amplitudes()
+        # calculate delays and amplitude curve
+        delays = (self.hyp_distances / self.c) * self.fs
+        self.init_delay = delays[0]
+        self.delta_delays = np.diff(delays)
+        self.amp_env = 1 / (self.hyp_distances**2)
+        self.amp_env /= max(self.amp_env) / self.max_amp
 
-    def _calc_delays(self):
-        # delay times uncorrected for source movement
-        self.straight_time_delays = self.hyp_distances/self.c
+    def apply_doppler(self, x, interpolate=interpolators.linear):
+        # init output array and initial read position
+        out = np.zeros(len(self.delta_delays) + 1)
+        read_pointer = 0
 
-        # build array of time steps
-        self.total_time_seconds = len(self.hyp_distances)/self.fs
-        t_steps = np.arange(0, self.total_time_seconds, self.t_interval)
-        t_steps = t_steps[:len(self.straight_time_delays)]
+        for i in range(len(out)):
 
-        # calculate tau (emission time)
-        tau, self.tau_x_ax = self._calc_tau(t_steps)
+            n = int(read_pointer)  # whole part
+            s = read_pointer % 1  # fractional part
 
-        # correct delays for source movement, converted to samples
-        self.delays = self.straight_time_delays[tau] * self.fs
+            # replace this with call to interpolator
+            out[i] = interpolate(x, n, s)
 
-    def _calc_tau(self, t_steps):
-        # tau calcaulated as per Rizzi/Sullivan
-        tau = ((t_steps - self.straight_time_delays) * self.fs).astype(int)
-        tau_x_ax = np.where(tau > 0)[0]
-        tau = tau[tau_x_ax]
+            read_pointer += (1 - self.delta_delays[i-1])
 
-        return tau, tau_x_ax
+        return out
 
-    def _calc_amplitudes(self):
-        # calculate R_tau
-        tau_shifted_distances = (self.delays / self.fs) * self.c
+    def apply_amp_env(self, x):
+        return x * self.amp_env
 
-        # calculate amplitude curve
-        inv_sqr_amplitudes = 1 / tau_shifted_distances**2
-
-        # scale to specified maximum amplitude
-        inv_sqr_amplitudes /= max(inv_sqr_amplitudes) / self.max_amp
-
-        self.amp_env = inv_sqr_amplitudes
-
-    def apply_doppler(self, signal, interpolator=lagrange):
-        doppler_out = interpolator(signal, self.delays, self.fs)
-        return doppler_out
-
-    def apply_amp_env(self, signal):
-        return signal[self.tau_x_ax] * self.amp_env
-
-    def process(self, signal):
-        if len(signal) < len(self.hyp_distances):
+    def process(self, x):
+        if len(x) < len(self.hyp_distances):
             raise ValueError('Input signal shorter than path to be rendered')
 
         return self.apply_amp_env(
-                  self.apply_doppler(
-                      signal[:self.delays.shape[0]]
-                  )
+            self.apply_doppler(x)
         )
