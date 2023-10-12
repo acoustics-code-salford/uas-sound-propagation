@@ -204,7 +204,10 @@ class PropagationPath():
             n = int(read_pointer)  # whole part
             s = read_pointer % 1  # fractional part
 
-            # replace this with call to interpolator
+            # since we send the new interpolators the entire signal, it might not
+            # be so crazy to use sinc interpolation after all
+            # it may be we only need to send a fraction of the signal here
+            # !!! check performance !!!
             out[i] = interpolate(x, n, s)
 
             read_pointer += (1 - self.delta_delays[i-1])
