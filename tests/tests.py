@@ -16,7 +16,7 @@ class TestInterpolators(unittest.TestCase):
     def test_interpolators(self):
         frac_sample_pos = random.randint(0, len(self.x)) + random.random()
         n, s = utils.nearest_whole_fraction(frac_sample_pos)
-        
+
         # basic linear interpolation for ballpark figure
         baseline = self.basic_linear(self.x, n, s)
 
