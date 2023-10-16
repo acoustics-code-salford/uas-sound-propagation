@@ -43,15 +43,19 @@ class AllpassInterpolator(FractionalInterpolator):
 
     @delta.setter
     def delta(self, delta):
+        delta += 1
         self.a = (1 - delta) / (1 + delta)
         self._delta = delta
 
     def _calc_delayed(self, x):
         y = np.zeros(len(x))
-        for i in range(len(x)-1):
-            y[i + 1] = self.a * (x[i + 1] - y[i]) + x[i]
+        for i in range(0, len(x) - 1):
+            y[i] = self.a * (x[i] - y[i - 1]) + x[i - 1]
 
         return y
+
+    def __getitem__(self, item):
+        return self._x_delayed[item + 1]
 
 
 class SincInterpolator(FractionalInterpolator):
@@ -85,7 +89,3 @@ def interpolate(
 
     delayed_x_frame = InterpAlgo(x_frame, s, **kwargs)
     return delayed_x_frame[interp_win_len//2]
-
-
-# TODO: write some unit tests dependent on these interpolators to make
-# sure I'm not going to break them unintentionally

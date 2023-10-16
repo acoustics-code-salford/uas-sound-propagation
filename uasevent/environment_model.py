@@ -1,5 +1,6 @@
 import numpy as np
-import interpolators
+from . import interpolators
+from .utils import nearest_whole_fraction
 
 
 class UASEventRenderer():
@@ -217,14 +218,3 @@ class PropagationPath():
         return self.apply_amp_env(
             self.apply_doppler(x)
         )
-
-
-def nearest_whole_fraction(pos):
-    n = np.round(pos).astype(int)
-    s = (
-        -(-pos % 1)
-        if np.round(pos).astype(int) > pos
-        else pos % 1
-    )
-
-    return n, s
