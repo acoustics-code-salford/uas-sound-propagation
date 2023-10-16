@@ -39,4 +39,4 @@ jobs:
           sudo apt-get install libsndfile1 libsndfile1-dev
         
       - name: Test
-        run: poetry run python unittest
+        run: poetry run python -m unittest
