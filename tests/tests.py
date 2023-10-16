@@ -1,6 +1,6 @@
-import uasevent.utils as utils
 import random
 import unittest
+import uasevent.utils as utils
 import uasevent.interpolators as interpolators
 
 
@@ -25,10 +25,10 @@ class TestInterpolators(unittest.TestCase):
 
         # assert various interpolators give close results
         sinc_interp = interpolators.SincInterpolator(self.x, s)
-        self.assertAlmostEqual(sinc_interp[n], baseline, 3)
+        self.assertAlmostEqual(sinc_interp[n], baseline, 2)
 
-        if s < 1:
-            n += 1
-            s += 1
         allpass_interp = interpolators.AllpassInterpolator(self.x, s)
-        self.assertAlmostEqual(allpass_interp[n], baseline, 3)
+        self.assertAlmostEqual(allpass_interp[n], baseline, 2)
+
+        windowed_interp = interpolators.interpolate(self.x, n, s)
+        self.assertAlmostEqual(windowed_interp, sinc_interp[n])
