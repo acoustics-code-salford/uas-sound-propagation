@@ -1,6 +1,6 @@
 import numpy as np
-from scipy import signal
-import interpolators
+from . import interpolators
+from .utils import nearest_whole_fraction
 
 
 class UASEventRenderer():
@@ -27,19 +27,18 @@ class UASEventRenderer():
         # in samples
         offset = (self.ground_reflection.init_delay
                   - self.direct_path.init_delay)
-        whole_offset = np.round(offset).astype(int)
-        frac_offset = (
-            -(-offset % 1)
-            if np.round(offset).astype(int) > offset
-            else offset % 1
+
+        # calculate whole and fractional number of samples to delay reflection
+        whole_offset, frac_offset = nearest_whole_fraction(offset)
+        # calculate fractional delay of reflection
+        reflection = interpolators.SincInterpolator(reflection, frac_offset)
+        # add zeros to start of reflection to account for whole sample delay
+        reflection = np.concatenate(
+            (
+                np.zeros(whole_offset),
+                np.array([i for i in reflection])[:-whole_offset]
+            )
         )
-
-        h = interpolators.sinc_fractional_delay_filter(frac_offset)
-
-        reflection = np.concatenate((np.zeros(whole_offset), reflection))
-        reflection = signal.fftconvolve(reflection, h, 'same')[:-whole_offset]
-        self.d = direct
-        self.r = reflection
         return direct + reflection
 
     @property
@@ -194,19 +193,17 @@ class PropagationPath():
         self.amp_env = 1 / (self.hyp_distances**2)
         self.amp_env /= max(self.amp_env) / self.max_amp
 
-    def apply_doppler(self, x, interpolate=interpolators.linear):
+    def apply_doppler(self, x):
         # init output array and initial read position
         out = np.zeros(len(self.delta_delays) + 1)
         read_pointer = 0
 
         for i in range(len(out)):
+            # find whole and fractional part
+            n, s, = nearest_whole_fraction(read_pointer)
+            out[i] = interpolators.interpolate(x, n, s)
 
-            n = int(read_pointer)  # whole part
-            s = read_pointer % 1  # fractional part
-
-            # replace this with call to interpolator
-            out[i] = interpolate(x, n, s)
-
+            # update read pointer position
             read_pointer += (1 - self.delta_delays[i-1])
 
         return out
