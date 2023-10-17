@@ -30,7 +30,7 @@ def load_params(csv_file):
 
 def nearest_whole_fraction(pos):
     n = np.round(pos).astype(int)
-    s = - (
+    s = (
         - (- pos % 1)
         if np.round(pos).astype(int) > pos
         else pos % 1

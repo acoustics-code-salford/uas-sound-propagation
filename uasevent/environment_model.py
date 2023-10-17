@@ -201,7 +201,8 @@ class PropagationPath():
         for i in range(len(out)):
             # find whole and fractional part
             n, s, = nearest_whole_fraction(read_pointer)
-            out[i] = interpolators.interpolate(x, n, s)
+            # negative s for correct indexing over n
+            out[i] = interpolators.interpolate(x, n, -s)
 
             # update read pointer position
             read_pointer += (1 - self.delta_delays[i-1])

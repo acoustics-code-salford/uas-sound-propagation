@@ -18,17 +18,27 @@ class TestInterpolators(unittest.TestCase):
         n, s = utils.nearest_whole_fraction(frac_sample_pos)
 
         # basic linear interpolation for ballpark figure
-        baseline = self.basic_linear(self.x, n, s)
+        baseline = self.basic_linear(self.x, n, -s)
 
-        lin_interp = interpolators.LinearInterpolator(self.x, s)
+        lin_interp = interpolators.LinearInterpolator(self.x, -s)
         self.assertEqual(lin_interp[n], baseline)
 
         # assert various interpolators give close results
-        sinc_interp = interpolators.SincInterpolator(self.x, s)
+        sinc_interp = interpolators.SincInterpolator(self.x, -s)
         self.assertAlmostEqual(sinc_interp[n], baseline, 2)
 
-        allpass_interp = interpolators.AllpassInterpolator(self.x, s)
+        allpass_interp = interpolators.AllpassInterpolator(self.x, -s)
         self.assertAlmostEqual(allpass_interp[n], baseline, 2)
 
-        windowed_interp = interpolators.interpolate(self.x, n, s)
+        windowed_interp = interpolators.interpolate(self.x, n, -s)
         self.assertAlmostEqual(windowed_interp, sinc_interp[n])
+
+        # assert result is in correct range
+        sample_a = self.x[n]
+        sample_b = self.x[(n - 1) if s < 0 else (n + 1)]
+        if sample_a > sample_b:
+            self.assertGreater(sample_a, sinc_interp[n])
+            self.assertGreater(sinc_interp[n], sample_b)
+        else:
+            self.assertLess(sample_a, sinc_interp[n])
+            self.assertLess(sinc_interp[n], sample_b)
