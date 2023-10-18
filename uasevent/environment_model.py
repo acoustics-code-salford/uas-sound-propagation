@@ -256,10 +256,9 @@ class GroundReflectionFilter():
     def R(self, phi):
         # angle defined between ground plane and wave path
         # for definition between vertical, use cos
-        # TODO: get this to return array for multiple phi
-        # TODO: possibly hard-code list of phi 
-        # (response symmetrical about 90 deg - test to make sure)
-        return (
-            (self.Z() * np.sin(phi) - self.Z_0) /
-            (self.Z() * np.sin(phi) + self.Z_0)
-        )
+        return np.array([
+                (self.Z() * np.sin(p) - self.Z_0) /
+                (self.Z() * np.sin(p) + self.Z_0)
+                for p in phi
+        ]).squeeze()
+  
