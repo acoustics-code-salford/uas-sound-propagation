@@ -219,3 +219,47 @@ class PropagationPath():
         return self.apply_amp_env(
             self.apply_doppler(x)
         )
+
+
+class GroundReflectionFilter():
+    def __init__(
+            self,
+            freqs,
+            material='asphalt',
+            Z_0=413.26
+            ):
+        
+        self.freqs = freqs
+        self.Z_0 = Z_0
+        self.material = material
+
+    @property
+    def material(self):
+        return self._material
+    
+    @material.setter
+    def material(self, material):
+        match material:
+            case 'grass':
+                self._sigma = 300  # kPa s m^-2
+            case 'soil':
+                self._sigma = 5000
+            case 'asphalt':
+                self._sigma = 20_000
+        self._material = material 
+        
+    def Z(self):
+        R = 1 + 9.08 * (self.freqs / self._sigma) ** -0.75
+        X = -11.9 * (self.freqs / self._sigma) ** -0.73
+        return (R + 1j*X) * self.Z_0
+    
+    def R(self, phi):
+        # angle defined between ground plane and wave path
+        # for definition between vertical, use cos
+        # TODO: get this to return array for multiple phi
+        # TODO: possibly hard-code list of phi 
+        # (response symmetrical about 90 deg - test to make sure)
+        return (
+            (self.Z() * np.sin(phi) - self.Z_0) /
+            (self.Z() * np.sin(phi) + self.Z_0)
+        )
