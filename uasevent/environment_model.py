@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import signal
 from . import interpolators
 from .utils import nearest_whole_fraction
 
@@ -224,14 +225,19 @@ class PropagationPath():
 class GroundReflectionFilter():
     def __init__(
             self,
-            freqs,
+            freqs=np.geomspace(20, 24000),
+            angles=np.arange(1, 90),
             material='asphalt',
-            Z_0=413.26
+            Z_0=413.26,
+            fs=48000,
             ):
         
         self.freqs = freqs
+        self.phi = np.deg2rad(angles)
         self.Z_0 = Z_0
         self.material = material
+        self.fs=fs
+        self.filterbank = self._compute_filterbank()
 
     @property
     def material(self):
@@ -246,19 +252,31 @@ class GroundReflectionFilter():
                 self._sigma = 5000
             case 'asphalt':
                 self._sigma = 20_000
-        self._material = material 
-        
-    def Z(self):
+        self._material = material
+
+    def _Z(self):
         R = 1 + 9.08 * (self.freqs / self._sigma) ** -0.75
         X = -11.9 * (self.freqs / self._sigma) ** -0.73
         return (R + 1j*X) * self.Z_0
-    
-    def R(self, phi):
+
+    def _R(self):
         # angle defined between ground plane and wave path
         # for definition between vertical, use cos
+        return np.real(
+            np.array([
+                (self._Z() * np.sin(p) - self.Z_0) /
+                (self._Z() * np.sin(p) + self.Z_0)
+                for p in self.phi
+            ])
+        ).squeeze()
+
+    def _compute_filterbank(self):
         return np.array([
-                (self.Z() * np.sin(p) - self.Z_0) /
-                (self.Z() * np.sin(p) + self.Z_0)
-                for p in phi
-        ]).squeeze()
-  
+            signal.firls(21, self.freqs, abs(r), fs=self.fs)
+            for r in self._R()
+        ])
+
+    def filter(self, x, angle):
+        angle = round(angle)
+        h = self.filterbank[angle - 1]
+        return signal.fftconvolve(x, h, 'same')
