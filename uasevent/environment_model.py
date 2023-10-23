@@ -1,4 +1,5 @@
 import numpy as np
+from scipy import signal
 from . import interpolators
 from .utils import nearest_whole_fraction
 
@@ -7,16 +8,14 @@ class UASEventRenderer():
     def __init__(
             self,
             flight_parameters,
-            fs=192000,
+            ground_material='grass',
+            fs=48000,
             receiver_height=1.5,
-            direct_amplitude=1.0,
-            reflection_amplitude=0.2
             ) -> None:
 
         self.fs = fs
         self.receiver_height = receiver_height
-        self.direct_amplitude = direct_amplitude
-        self.reflection_amplitude = reflection_amplitude
+        self.ground_material = ground_material
         self.flight_parameters = flight_parameters
 
     def render(self, x):
@@ -39,6 +38,8 @@ class UASEventRenderer():
                 np.array([i for i in reflection])[:-whole_offset]
             )
         )
+        self.d = direct
+        self.r = reflection
         return direct + reflection
 
     @property
@@ -52,22 +53,12 @@ class UASEventRenderer():
             self._setup_paths()
 
     @property
-    def direct_amplitude(self):
-        return self._direct_amplitude
+    def ground_material(self):
+        return self._ground_material
 
-    @direct_amplitude.setter
-    def direct_amplitude(self, amp):
-        self._direct_amplitude = amp
-        if hasattr(self, 'flight_parameters'):
-            self._setup_paths()
-
-    @property
-    def reflection_amplitude(self):
-        return self._reflection_amplitude
-
-    @reflection_amplitude.setter
-    def reflection_amplitude(self, amp):
-        self._reflection_amplitude = amp
+    @ground_material.setter
+    def ground_material(self, material):
+        self._ground_material = material
         if hasattr(self, 'flight_parameters'):
             self._setup_paths()
 
@@ -78,12 +69,12 @@ class UASEventRenderer():
     @flight_parameters.setter
     def flight_parameters(self, params):
         self._x_positions = np.empty(0)
-        self._y_positions = np.empty(0)
+        self._z_positions = np.empty(0)
 
         for p in params:
-            x_next, y_next = self._xy_over_time(*p)
+            x_next, z_next = self._xz_over_time(*p)
             self._x_positions = np.append(self._x_positions, x_next)
-            self._y_positions = np.append(self._y_positions, y_next)
+            self._z_positions = np.append(self._z_positions, z_next)
 
         self._setup_paths()
         self._flight_parameters = params
@@ -92,32 +83,32 @@ class UASEventRenderer():
         # set up direct and reflected paths
         self.direct_path = PropagationPath(
             self._x_positions,
-            self._y_positions,
-            self.direct_amplitude,
-            self.fs,
-            self.receiver_height
+            self._z_positions,
+            self.receiver_height,
+            None,
+            self.fs
         )
 
         self.ground_reflection = PropagationPath(
             self._x_positions,
-            -self._y_positions,
-            self.reflection_amplitude,
-            self.fs,
-            self.receiver_height
+            -self._z_positions,
+            self.receiver_height,
+            self.ground_material,
+            self.fs
         )
 
-    def _xy_over_time(self, start, end, speed_ramp):
+    def _xz_over_time(self, start, end, speed_ramp):
         t_interval = 1/self.fs
 
         # extract initial and final speeds
         s_start, s_end = speed_ramp
-        x_start, y_start = start
-        x_end, y_end = end
+        x_start, z_start = start
+        x_end, z_end = end
 
         # find out distance over which accel/deceleration takes place
         accel_distance = np.linalg.norm(np.array([start]) - np.array([end]))
 
-        theta = np.arctan2((y_end - y_start), (x_end - x_start))
+        theta = np.arctan2((z_end - z_start), (x_end - x_start))
 
         # calculate acceleration
         acceleration = (
@@ -126,7 +117,7 @@ class UASEventRenderer():
 
         if acceleration == 0:  # no accel / decel
             x_diff = s_start * np.cos(theta)
-            y_diff = s_start * np.sin(theta)
+            z_diff = s_start * np.sin(theta)
 
             n_output_samples = (
                 np.ceil((accel_distance / s_start) * self.fs).astype(int)
@@ -138,53 +129,56 @@ class UASEventRenderer():
             else:
                 x_distances = np.arange(x_start, x_end, x_diff * t_interval)
 
-            if abs(y_diff) < 1e-10:
-                y_distances = np.ones(n_output_samples) * y_start
+            if abs(z_diff) < 1e-10:
+                z_distances = np.ones(n_output_samples) * z_start
             else:
-                y_distances = np.arange(y_start, y_end, y_diff * t_interval)
+                z_distances = np.arange(z_start, z_end, z_diff * t_interval)
 
         else:
             # init position
             position = 0
 
             x_distances = np.empty(0)
-            y_distances = np.empty(0)
+            z_distances = np.empty(0)
 
             # this operates per-sample so can take a while with large fs
             while position < accel_distance:
                 position += s_start * t_interval
 
                 x_distances = np.append(x_distances, x_start)
-                y_distances = np.append(y_distances, y_start)
+                z_distances = np.append(z_distances, z_start)
 
                 x_start += s_start * np.cos(theta) * t_interval
-                y_start += s_start * np.sin(theta) * t_interval
+                z_start += s_start * np.sin(theta) * t_interval
 
                 s_start += acceleration * t_interval
 
-        return x_distances, y_distances
+        return x_distances, z_distances
 
 
 class PropagationPath():
     def __init__(
             self,
             x_distances,
-            y_distances,
-            max_amp=1.0,
-            fs=44100,
+            z_distances,
             receiver_height=1.5,
+            reflection_surface=None,
+            fs=48000,
+            max_amp=1.0,
             c=330
     ):
 
         self.max_amp = max_amp
         self.c = c
         self.fs = fs
+        self.reflection_surface = reflection_surface
 
-        y_distances -= receiver_height
+        z_distances -= receiver_height
 
         self.hyp_distances = np.linalg.norm(
-            np.array([x_distances, y_distances]).T, axis=1
+            np.array([x_distances, z_distances]).T, axis=1
         )
+        self.incident_angles = abs(np.arctan(z_distances / x_distances))
 
         # calculate delays and amplitude curve
         delays = (self.hyp_distances / self.c) * self.fs
@@ -212,10 +206,101 @@ class PropagationPath():
     def apply_amp_env(self, x):
         return x * self.amp_env
 
+    def ground_effect(self, x):
+        # do not apply filter if surface not set (direct path)
+        if self.reflection_surface is None:
+            return x
+
+        frame_len = 512
+        hop_len = frame_len // 2
+        window = np.hanning(frame_len)
+
+        # neat trick to get windowed frames
+        x_windowed = np.lib.stride_tricks.sliding_window_view(
+            x, frame_len)[::hop_len] * window
+
+        angle_per_frame = np.round(np.rad2deg(
+            np.lib.stride_tricks.sliding_window_view(
+                self.incident_angles, frame_len)[::hop_len].mean(1)))
+
+        refl_filter = GroundReflectionFilter(material=self.reflection_surface)
+
+        x_out = np.zeros(len(x))
+        for i, (angle, frame) in enumerate(zip(angle_per_frame, x_windowed)):
+            frame_index = i * hop_len
+            x_out[frame_index:frame_index + frame_len] += \
+                refl_filter.filter(frame, angle)
+        return x_out
+
     def process(self, x):
         if len(x) < len(self.hyp_distances):
             raise ValueError('Input signal shorter than path to be rendered')
 
-        return self.apply_amp_env(
-            self.apply_doppler(x)
-        )
+        return \
+            self.ground_effect(
+                self.apply_amp_env(
+                    self.apply_doppler(x)
+                )
+            )
+
+
+class GroundReflectionFilter():
+    def __init__(
+            self,
+            freqs=np.geomspace(20, 24000),
+            angles=np.arange(1, 91),
+            material='asphalt',
+            Z_0=413.26,
+            fs=48000,
+            n_taps=21
+            ):
+
+        self.freqs = freqs
+        self.phi = np.deg2rad(angles)
+        self.Z_0 = Z_0
+        self.material = material
+        self.fs = fs
+        self.n_taps = n_taps
+        self.filterbank = self._compute_filterbank()
+
+    @property
+    def material(self):
+        return self._material
+
+    @material.setter
+    def material(self, material):
+        match material:
+            case 'grass':
+                self._sigma = 300  # kPa s m^-2
+            case 'soil':
+                self._sigma = 5000
+            case 'asphalt':
+                self._sigma = 20_000
+        self._material = material
+
+    def _Z(self):
+        R = 1 + 9.08 * (self.freqs / self._sigma) ** -0.75
+        X = -11.9 * (self.freqs / self._sigma) ** -0.73
+        return (R + 1j*X) * self.Z_0
+
+    def _R(self):
+        # angle defined between ground plane and wave path
+        # for definition between vertical, use cos
+        return np.real(
+            np.array([
+                (self._Z() * np.sin(p) - self.Z_0) /
+                (self._Z() * np.sin(p) + self.Z_0)
+                for p in self.phi
+            ])
+        ).squeeze()
+
+    def _compute_filterbank(self):
+        return np.array([
+            signal.firls(self.n_taps, self.freqs, abs(r), fs=self.fs)
+            for r in self._R()
+        ])
+
+    def filter(self, x, angle):
+        angle = round(angle)
+        h = self.filterbank[angle - 1]
+        return signal.fftconvolve(x, h, 'same')
