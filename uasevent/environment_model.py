@@ -83,16 +83,14 @@ class UASEventRenderer():
         # set up direct and reflected paths
         self.direct_path = PropagationPath(
             self._x_positions,
-            self._z_positions,
-            self.receiver_height,
+            self._z_positions - self.receiver_height,
             None,
             self.fs
         )
 
         self.ground_reflection = PropagationPath(
             self._x_positions,
-            -self._z_positions,
-            self.receiver_height,
+            -self._z_positions - self.receiver_height,
             self.ground_material,
             self.fs
         )
@@ -128,7 +126,6 @@ class PropagationPath():
             self,
             x_distances,
             z_distances,
-            receiver_height=1.5,
             reflection_surface=None,
             fs=48000,
             max_amp=1.0,
@@ -139,8 +136,6 @@ class PropagationPath():
         self.c = c
         self.fs = fs
         self.reflection_surface = reflection_surface
-
-        z_distances -= receiver_height
 
         self.hyp_distances = np.linalg.norm(
             np.array([x_distances, z_distances]).T, axis=1

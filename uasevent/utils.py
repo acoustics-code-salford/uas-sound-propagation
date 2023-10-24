@@ -20,12 +20,9 @@ def load_params(csv_file):
         dtype='str'
     ).reshape(-1, 3)  # reshape in case of single-event flight
 
-    params = np.zeros((*str_params.shape, 2))
-    for i, row in enumerate(str_params):
-        for j, cell in enumerate(row):
-            params[i, j, :] = np.array(cell.strip().split(' '), dtype=int)
-
-    return params
+    return [[np.array(cell.strip().split(' '), dtype=int)
+             for cell in row]
+             for row in str_params]
 
 
 def nearest_whole_fraction(pos):
