@@ -98,31 +98,6 @@ class UASEventRenderer():
             self.fs
         )
 
-    def _position_over_time(self, start, end, speeds):
-        v_0, v_T = speeds
-        distance = np.linalg.norm(start - end)
-        # heading of source
-        vector = ((end - start) / distance)
-        # acceleration
-        a = ((v_T**2) - (v_0**2)) / (2 * distance)
-        # number of time steps in samples for operation
-        n_output_samples = self.fs * ((v_T-v_0) / a) if a != 0 else \
-            (distance / v_0) * self.fs
-
-        # array of positions at each time step
-        x_t = np.array([
-            [
-                (v_0 * (t / self.fs))
-                + ((a * (t / self.fs)**2) / 2)
-                for t in range(int(n_output_samples))
-            ]
-        ]).T
-
-        # map to axes
-        xyz = start + vector * x_t
-        x, _, z = xyz.T
-        return x, z
-
 
 class PropagationPath():
     def __init__(
@@ -137,7 +112,7 @@ class PropagationPath():
         self.max_amp = max_amp
         self.c = c
         self.fs = fs
-        self.reflection_surface = reflection_surface        
+        self.reflection_surface = reflection_surface
         self.theta, self.phi, self.r = cart_to_sph(flightpath)
 
         # calculate delays and amplitude curve

@@ -47,25 +47,25 @@ def cart_to_sph(xyz, return_r=True):
 
 
 def vector_t(start, end, speeds, fs=48000):
-        v_0, v_T = speeds
-        distance = np.linalg.norm(start - end)
-        # heading of source
-        vector = ((end - start) / distance)
-        # acceleration
-        a = ((v_T**2) - (v_0**2)) / (2 * distance)
-        # number of time steps in samples for operation
-        n_output_samples = fs * ((v_T-v_0) / a) if a != 0 else \
-            (distance / v_0) * fs
+    v_0, v_T = speeds
+    distance = np.linalg.norm(start - end)
+    # heading of source
+    vector = ((end - start) / distance)
+    # acceleration
+    a = ((v_T**2) - (v_0**2)) / (2 * distance)
+    # number of time steps in samples for operation
+    n_output_samples = fs * ((v_T-v_0) / a) if a != 0 else \
+        (distance / v_0) * fs
 
-        # array of positions at each time step
-        x_t = np.array([
-            [
-                (v_0 * (t / fs))
-                + ((a * (t / fs)**2) / 2)
-                for t in range(int(n_output_samples))
-            ]
-        ]).T
+    # array of positions at each time step
+    x_t = np.array([
+        [
+            (v_0 * (t / fs))
+            + ((a * (t / fs)**2) / 2)
+            for t in range(int(n_output_samples))
+        ]
+    ]).T
 
-        # map to axes
-        xyz = (start + vector * x_t).T
-        return xyz
+    # map to axes
+    xyz = (start + vector * x_t).T
+    return xyz
