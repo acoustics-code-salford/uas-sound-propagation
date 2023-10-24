@@ -97,63 +97,30 @@ class UASEventRenderer():
             self.fs
         )
 
-    def _xz_over_time(self, start, end, speed_ramp):
-        t_interval = 1/self.fs
+    def _xz_over_time(self, start, end, speeds):
+        v_0, v_T = speeds
+        distance = np.linalg.norm(start - end)
+        # heading of source
+        vector = ((end - start) / distance)
+        # acceleration
+        a = ((v_T**2) - (v_0**2)) / (2 * distance)
+        # number of time steps in samples for operation
+        n_output_samples = self.fs * ((v_T-v_0) / a) if a != 0 else \
+            (distance / v_0) * self.fs
 
-        # extract initial and final speeds
-        s_start, s_end = speed_ramp
-        x_start, z_start = start
-        x_end, z_end = end
+        # array of positions at each time step
+        x_t = np.array([
+            [
+                (v_0 * (t / self.fs)) 
+                + ((a * (t / self.fs)**2) / 2) 
+                for t in range(int(n_output_samples))
+            ]
+        ]).T
 
-        # find out distance over which accel/deceleration takes place
-        accel_distance = np.linalg.norm(np.array([start]) - np.array([end]))
-
-        theta = np.arctan2((z_end - z_start), (x_end - x_start))
-
-        # calculate acceleration
-        acceleration = (
-            lambda start, end, distance: ((end**2) - (start**2)) / (2*distance)
-        )(s_start, s_end, accel_distance)
-
-        if acceleration == 0:  # no accel / decel
-            x_diff = s_start * np.cos(theta)
-            z_diff = s_start * np.sin(theta)
-
-            n_output_samples = (
-                np.ceil((accel_distance / s_start) * self.fs).astype(int)
-            )
-
-            # construct x/y distance arrays
-            if abs(x_diff) < 1e-10:
-                x_distances = np.ones(n_output_samples) * x_start
-            else:
-                x_distances = np.arange(x_start, x_end, x_diff * t_interval)
-
-            if abs(z_diff) < 1e-10:
-                z_distances = np.ones(n_output_samples) * z_start
-            else:
-                z_distances = np.arange(z_start, z_end, z_diff * t_interval)
-
-        else:
-            # init position
-            position = 0
-
-            x_distances = np.empty(0)
-            z_distances = np.empty(0)
-
-            # this operates per-sample so can take a while with large fs
-            while position < accel_distance:
-                position += s_start * t_interval
-
-                x_distances = np.append(x_distances, x_start)
-                z_distances = np.append(z_distances, z_start)
-
-                x_start += s_start * np.cos(theta) * t_interval
-                z_start += s_start * np.sin(theta) * t_interval
-
-                s_start += acceleration * t_interval
-
-        return x_distances, z_distances
+        # map to axes
+        xyz = start + vector * x_t
+        x, _, z = xyz.T
+        return x, z
 
 
 class PropagationPath():

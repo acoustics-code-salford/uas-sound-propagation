@@ -1,4 +1,4 @@
-segment, startxy, endxy, speeds
+segment, startxz, endxz, speeds
 constant-speed flyby, -200 30, 180 30, 30 30
 decelerate, 180 30, 200 30, 30 0
 accelerate, 200 30, 180 30, 0 30
