@@ -70,7 +70,6 @@ class UASEventRenderer():
     def flight_parameters(self, params):
         self._flightpath = np.empty([3, 0])
 
-        # TODO: MIGHT BE ABLE TO DO THIS AS LIST COMPREHENSION
         for p in params:
             self._flightpath = np.append(
                 self._flightpath, vector_t(*p), axis=1)
@@ -80,20 +79,20 @@ class UASEventRenderer():
 
     def _setup_paths(self):
         # set up direct and reflected paths
-        # TODO: THIS FEELS CLUNKY, CONSIDER REFACTORING
-        direct_coords = np.copy(self._flightpath)
-        direct_coords[2] = direct_coords[2] - self.receiver_height
-        refl_coords = np.copy(self._flightpath)
-        refl_coords[2] = - refl_coords[2] - self.receiver_height
-
         self.direct_path = PropagationPath(
-            direct_coords,
+            np.concatenate(
+                (self._flightpath[:2], 
+                 self._flightpath[2:] - self.receiver_height)
+            ),
             None,
             self.fs
         )
 
         self.ground_reflection = PropagationPath(
-            refl_coords,
+            np.concatenate(
+                (self._flightpath[:2], 
+                 - self._flightpath[2:] - self.receiver_height)
+            ),
             self.ground_material,
             self.fs
         )
@@ -106,7 +105,8 @@ class PropagationPath():
             reflection_surface=None,
             fs=48000,
             max_amp=1.0,
-            c=330
+            c=330,
+            frame_len=512
     ):
 
         self.max_amp = max_amp
@@ -121,6 +121,13 @@ class PropagationPath():
         self.delta_delays = np.diff(delays)
         self.amp_env = 1 / (self.r**2)
         self.amp_env /= max(self.amp_env) / self.max_amp
+
+        self.frame_len = frame_len
+        self.hop_len = frame_len // 2
+        self.phi_per_frame = np.lib.stride_tricks.sliding_window_view(
+                self.phi, self.frame_len)[::self.hop_len].mean(1)
+        self.theta_per_frame = np.lib.stride_tricks.sliding_window_view(
+                self.theta, self.frame_len)[::self.hop_len].mean(1)
 
     def apply_doppler(self, x):
         # init output array and initial read position
@@ -146,27 +153,22 @@ class PropagationPath():
         if self.reflection_surface is None:
             return x
 
-        frame_len = 512
-        hop_len = frame_len // 2
-        window = np.hanning(frame_len)
-
         # neat trick to get windowed frames
         x_windowed = np.lib.stride_tricks.sliding_window_view(
-            x, frame_len)[::hop_len] * window
-
-        phi_per_frame = np.round(np.rad2deg(
-            np.lib.stride_tricks.sliding_window_view(
-                self.phi, frame_len)[::hop_len].mean(1)))
+            x, self.frame_len)[::self.hop_len] * np.hanning(self.frame_len)
 
         refl_filter = GroundReflectionFilter(material=self.reflection_surface)
 
         x_out = np.zeros(len(x))
-        for i, (angle, frame) in enumerate(zip(phi_per_frame, x_windowed)):
-            frame_index = i * hop_len
-            angle = 180 - angle  # reflection angle
-            print(angle)
-            x_out[frame_index:frame_index + frame_len] += \
+        for i, (angle, frame) in enumerate(
+            zip(self.phi_per_frame, x_windowed)):
+
+            frame_index = i * self.hop_len
+            angle = np.round(np.rad2deg(np.pi - angle))  # reflection angle
+
+            x_out[frame_index:frame_index + self.frame_len] += \
                 refl_filter.filter(frame, angle)
+            
         return x_out
 
     def process(self, x):
