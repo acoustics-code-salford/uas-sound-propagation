@@ -1,7 +1,7 @@
 import numpy as np
 from scipy import signal
 from . import interpolators
-from .utils import nearest_whole_fraction
+from .utils import nearest_whole_fraction, vector_t, cart_to_sph
 
 
 class UASEventRenderer():
@@ -68,13 +68,11 @@ class UASEventRenderer():
 
     @flight_parameters.setter
     def flight_parameters(self, params):
-        self._x_positions = np.empty(0)
-        self._z_positions = np.empty(0)
+        self._flightpath = np.empty([3, 0])
 
         for p in params:
-            x_next, z_next = self._xz_over_time(*p)
-            self._x_positions = np.append(self._x_positions, x_next)
-            self._z_positions = np.append(self._z_positions, z_next)
+            self._flightpath = np.append(
+                self._flightpath, vector_t(*p), axis=1)
 
         self._setup_paths()
         self._flight_parameters = params
@@ -82,110 +80,53 @@ class UASEventRenderer():
     def _setup_paths(self):
         # set up direct and reflected paths
         self.direct_path = PropagationPath(
-            self._x_positions,
-            self._z_positions,
-            self.receiver_height,
+            np.concatenate(
+                (self._flightpath[:2],
+                 self._flightpath[2:] - self.receiver_height)
+            ),
             None,
             self.fs
         )
 
         self.ground_reflection = PropagationPath(
-            self._x_positions,
-            -self._z_positions,
-            self.receiver_height,
+            np.concatenate(
+                (self._flightpath[:2],
+                 - self._flightpath[2:] - self.receiver_height)
+            ),
             self.ground_material,
             self.fs
         )
-
-    def _xz_over_time(self, start, end, speed_ramp):
-        t_interval = 1/self.fs
-
-        # extract initial and final speeds
-        s_start, s_end = speed_ramp
-        x_start, z_start = start
-        x_end, z_end = end
-
-        # find out distance over which accel/deceleration takes place
-        accel_distance = np.linalg.norm(np.array([start]) - np.array([end]))
-
-        theta = np.arctan2((z_end - z_start), (x_end - x_start))
-
-        # calculate acceleration
-        acceleration = (
-            lambda start, end, distance: ((end**2) - (start**2)) / (2*distance)
-        )(s_start, s_end, accel_distance)
-
-        if acceleration == 0:  # no accel / decel
-            x_diff = s_start * np.cos(theta)
-            z_diff = s_start * np.sin(theta)
-
-            n_output_samples = (
-                np.ceil((accel_distance / s_start) * self.fs).astype(int)
-            )
-
-            # construct x/y distance arrays
-            if abs(x_diff) < 1e-10:
-                x_distances = np.ones(n_output_samples) * x_start
-            else:
-                x_distances = np.arange(x_start, x_end, x_diff * t_interval)
-
-            if abs(z_diff) < 1e-10:
-                z_distances = np.ones(n_output_samples) * z_start
-            else:
-                z_distances = np.arange(z_start, z_end, z_diff * t_interval)
-
-        else:
-            # init position
-            position = 0
-
-            x_distances = np.empty(0)
-            z_distances = np.empty(0)
-
-            # this operates per-sample so can take a while with large fs
-            while position < accel_distance:
-                position += s_start * t_interval
-
-                x_distances = np.append(x_distances, x_start)
-                z_distances = np.append(z_distances, z_start)
-
-                x_start += s_start * np.cos(theta) * t_interval
-                z_start += s_start * np.sin(theta) * t_interval
-
-                s_start += acceleration * t_interval
-
-        return x_distances, z_distances
 
 
 class PropagationPath():
     def __init__(
             self,
-            x_distances,
-            z_distances,
-            receiver_height=1.5,
+            flightpath,
             reflection_surface=None,
             fs=48000,
             max_amp=1.0,
-            c=330
+            c=330,
+            frame_len=512
     ):
 
         self.max_amp = max_amp
         self.c = c
         self.fs = fs
         self.reflection_surface = reflection_surface
-
-        z_distances -= receiver_height
-
-        self.hyp_distances = np.linalg.norm(
-            np.array([x_distances, z_distances]).T, axis=1
-        )
-        self.incident_angles = abs(np.arctan(z_distances / x_distances))
+        self.theta, self.phi, self.r = cart_to_sph(flightpath)
 
         # calculate delays and amplitude curve
-        delays = (self.hyp_distances / self.c) * self.fs
+        delays = (self.r / self.c) * self.fs
         self.init_delay = delays[0]
         self.delta_delays = np.diff(delays)
-        self.amp_env = 1 / (self.hyp_distances**2)
-        self.amp_env /= max(self.amp_env) / self.max_amp
+        self.amp_env = 1 / (self.r**2)
+
+        self.frame_len = frame_len
+        self.hop_len = frame_len // 2
+        self.phi_per_frame = np.lib.stride_tricks.sliding_window_view(
+                self.phi, self.frame_len)[::self.hop_len].mean(1)
+        self.theta_per_frame = np.lib.stride_tricks.sliding_window_view(
+                self.theta, self.frame_len)[::self.hop_len].mean(1)
 
     def apply_doppler(self, x):
         # init output array and initial read position
@@ -211,29 +152,26 @@ class PropagationPath():
         if self.reflection_surface is None:
             return x
 
-        frame_len = 512
-        hop_len = frame_len // 2
-        window = np.hanning(frame_len)
-
         # neat trick to get windowed frames
         x_windowed = np.lib.stride_tricks.sliding_window_view(
-            x, frame_len)[::hop_len] * window
-
-        angle_per_frame = np.round(np.rad2deg(
-            np.lib.stride_tricks.sliding_window_view(
-                self.incident_angles, frame_len)[::hop_len].mean(1)))
+            x, self.frame_len)[::self.hop_len] * np.hanning(self.frame_len)
 
         refl_filter = GroundReflectionFilter(material=self.reflection_surface)
 
         x_out = np.zeros(len(x))
-        for i, (angle, frame) in enumerate(zip(angle_per_frame, x_windowed)):
-            frame_index = i * hop_len
-            x_out[frame_index:frame_index + frame_len] += \
+        for i, (angle, frame) \
+                in enumerate(zip(self.phi_per_frame, x_windowed)):
+
+            frame_index = i * self.hop_len
+            angle = np.round(np.rad2deg(np.pi - angle))  # reflection angle
+
+            x_out[frame_index:frame_index + self.frame_len] += \
                 refl_filter.filter(frame, angle)
+
         return x_out
 
     def process(self, x):
-        if len(x) < len(self.hyp_distances):
+        if len(x) < len(self.r):
             raise ValueError('Input signal shorter than path to be rendered')
 
         return \
@@ -284,12 +222,10 @@ class GroundReflectionFilter():
         return (R + 1j*X) * self.Z_0
 
     def _R(self):
-        # angle defined between ground plane and wave path
-        # for definition between vertical, use cos
         return np.real(
             np.array([
-                (self._Z() * np.sin(p) - self.Z_0) /
-                (self._Z() * np.sin(p) + self.Z_0)
+                (self._Z() * np.cos(p) - self.Z_0) /
+                (self._Z() * np.cos(p) + self.Z_0)
                 for p in self.phi
             ])
         ).squeeze()

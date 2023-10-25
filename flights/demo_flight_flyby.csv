@@ -1,2 +1,2 @@
-segment, startxy, endxy, speeds
-constant-speed flyby, -200 30, 200 30, 30 30
+segment, startxyz, endxyz, speeds
+constant-speed flyby, -200 0 30, 200 0 30, 30 30

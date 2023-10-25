@@ -1,4 +1,4 @@
-*.wav
+temp_source.wav
 *.ipynb
 .venv
 __pycache__
