@@ -184,7 +184,7 @@ class PropagationPath():
                 in enumerate(zip(self.theta_per_frame,
                                  self.phi_per_frame,
                                  x_windowed)):
-            
+
             frame_index = i * self.hop_len
             Y_mn = utils.Y_array(self.N, np.array([theta]), np.array([phi]))
             x_out[frame_index:frame_index + self.frame_len] += (frame * Y_mn).T
