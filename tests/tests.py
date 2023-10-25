@@ -112,8 +112,8 @@ class TestRender(unittest.TestCase):
         self.assertEqual(len(self.renderer._flightpath.T), len(self.xout))
 
         # direct path should have higher power than reflection
-        self.assertGreater(sum(abs(self.renderer.d)),
-                           sum(abs(self.renderer.r)))
+        self.assertGreater(np.sum(abs(self.renderer.d)),
+                           np.sum(abs(self.renderer.r)))
 
         # first n samples of reflected signal should be zero
         n = int(np.floor(
@@ -123,4 +123,4 @@ class TestRender(unittest.TestCase):
         self.assertTrue((self.renderer.r[:n] == 0).all())
 
         # rendering of greater distance should have lower max amplitude
-        self.assertGreater(max(abs(self.xout)), max(abs(self.xout_2)))
+        self.assertGreater(np.max(abs(self.xout)), np.max(abs(self.xout_2)))
