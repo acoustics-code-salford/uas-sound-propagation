@@ -1,8 +1,10 @@
 import random
 import unittest
 import numpy as np
+import soundfile as sf
 import uasevent.utils as utils
 import uasevent.interpolators as interpolators
+from uasevent.environment_model import UASEventRenderer
 from numpy.testing import assert_array_almost_equal
 
 
@@ -47,9 +49,6 @@ class TestInterpolators(unittest.TestCase):
 
 
 class TestTrajectoryCalc(unittest.TestCase):
-    def __init__(self, methodName: str = "runTest") -> None:
-        super().__init__(methodName)
-
     def test_trajectory(self):
         fast_accel = [np.array([0,    0,   30]),
                       np.array([20,   0,  30]),
@@ -77,11 +76,44 @@ class TestTrajectoryCalc(unittest.TestCase):
         long_accel_traj = utils.vector_t(*large_distance_accel).T
         long_decel_traj = utils.vector_t(*large_distance_decel).T
 
+        # lower acceleration should result in longer trajectories
         self.assertGreater(len(slow_traj), len(fast_traj))
+
+        # accelerating and decelerating by the same amount over the
+        # same distance should result in equal-length trajectories
+        self.assertEqual(len(long_decel_traj), len(long_accel_traj))
+
+        # constant speed trajectory should end very near where specified
         assert_array_almost_equal(long_dist_const_traj[-1],
                                   large_distance_const_speed[1],
                                   3)
-        self.assertEqual(len(long_decel_traj), len(long_accel_traj))
+
+        # accelerating trajectory should end very near where specified
         assert_array_almost_equal(long_accel_traj[-1],
                                   large_distance_accel[1],
                                   3)
+
+
+class TestRender(unittest.TestCase):
+    def __init__(self, methodName: str = "runTest") -> None:
+        super().__init__(methodName)
+
+        self.x, fs = sf.read('tests/testsrc.wav')
+        params = utils.load_params('tests/test_flight.csv')
+        self.renderer = UASEventRenderer(params, 'asphalt', fs, 1.5)
+        self.xout = self.renderer.render(self.x)
+
+    def test_output_sensible(self):
+        # rendering should equal length of calculated trajectory
+        self.assertEqual(len(self.renderer._flightpath.T), len(self.xout))
+
+        # direct path should have higher power than reflection
+        self.assertGreater(sum(abs(self.renderer.d)),
+                           sum(abs(self.renderer.r)))
+
+        # first n samples of reflected signal should be zero
+        n = int(np.floor(
+            self.renderer.ground_reflection.init_delay
+            - self.renderer.direct_path.init_delay
+        ))
+        self.assertTrue((self.renderer.r[:n] == 0).all())

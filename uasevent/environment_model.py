@@ -81,7 +81,7 @@ class UASEventRenderer():
         # set up direct and reflected paths
         self.direct_path = PropagationPath(
             np.concatenate(
-                (self._flightpath[:2], 
+                (self._flightpath[:2],
                  self._flightpath[2:] - self.receiver_height)
             ),
             None,
@@ -90,7 +90,7 @@ class UASEventRenderer():
 
         self.ground_reflection = PropagationPath(
             np.concatenate(
-                (self._flightpath[:2], 
+                (self._flightpath[:2],
                  - self._flightpath[2:] - self.receiver_height)
             ),
             self.ground_material,
@@ -120,7 +120,6 @@ class PropagationPath():
         self.init_delay = delays[0]
         self.delta_delays = np.diff(delays)
         self.amp_env = 1 / (self.r**2)
-        self.amp_env /= max(self.amp_env) / self.max_amp
 
         self.frame_len = frame_len
         self.hop_len = frame_len // 2
@@ -160,15 +159,15 @@ class PropagationPath():
         refl_filter = GroundReflectionFilter(material=self.reflection_surface)
 
         x_out = np.zeros(len(x))
-        for i, (angle, frame) in enumerate(
-            zip(self.phi_per_frame, x_windowed)):
+        for i, (angle, frame) \
+                in enumerate(zip(self.phi_per_frame, x_windowed)):
 
             frame_index = i * self.hop_len
             angle = np.round(np.rad2deg(np.pi - angle))  # reflection angle
 
             x_out[frame_index:frame_index + self.frame_len] += \
                 refl_filter.filter(frame, angle)
-            
+
         return x_out
 
     def process(self, x):
