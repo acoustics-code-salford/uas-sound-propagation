@@ -76,6 +76,7 @@ def vector_t(start, end, speeds, fs=48000):
 def Y(m, n, theta, phi):
     return (
         ((-1) ** m) *  # condon-shortley compensation
+        SN3D(m, n) *
         np.array(
             [sp.lpmn(abs(m), n, np.sin(phi))[0][abs(m), n]
                 for phi in phi]
@@ -92,5 +93,16 @@ def Y_array(N, theta, phi):
     for i in range((N + 1) ** 2):
         n = math.isqrt(i)
         m = i - (n ** 2) - n
-        Y_mn[i, :] = Y(m, n, phi, theta).reshape(1, -1)
+        Y_mn[i, :] = Y(m, n, theta, phi).reshape(1, -1)
     return Y_mn
+
+
+def SN3D(m, n):
+    return (
+        np.sqrt(
+            (2 - (lambda m: 1 if m == 0 else 0)(m)) * (
+                sp.factorial(n - abs(m)) /
+                sp.factorial(n + abs(m))
+            )
+        )
+    )
