@@ -6,7 +6,7 @@ authors = ["Marc Green <marc1701@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.13"
+python = ">=3.9,<3.12"
 resampy = "^0.4.2"
 numpy = "^1.18.0"
 soundfile = "^0.12.1"
