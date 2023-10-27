@@ -1,7 +1,6 @@
 import numpy as np
 from scipy import signal
-from . import interpolators
-from .utils import nearest_whole_fraction, vector_t, cart_to_sph
+from . import interpolators, utils
 
 
 class UASEventRenderer():
@@ -28,16 +27,15 @@ class UASEventRenderer():
                   - self.direct_path.init_delay)
 
         # calculate whole and fractional number of samples to delay reflection
-        whole_offset, frac_offset = nearest_whole_fraction(offset)
+        whole_offset, frac_offset = utils.nearest_whole_fraction(offset)
         # calculate fractional delay of reflection
-        reflection = interpolators.SincInterpolator(reflection, frac_offset)
+        reflection = np.array([
+            i for i in interpolators.SincInterpolator(reflection, frac_offset)
+        ])
         # add zeros to start of reflection to account for whole sample delay
-        reflection = np.concatenate(
-            (
-                np.zeros(whole_offset),
-                np.array([i for i in reflection])[:-whole_offset]
-            )
-        )
+        reflection_zeros = np.zeros_like(reflection)
+        reflection_zeros[whole_offset:] += reflection[:-whole_offset]
+        reflection = reflection_zeros
         self.d = direct
         self.r = reflection
         return direct + reflection
@@ -72,7 +70,7 @@ class UASEventRenderer():
 
         for p in params:
             self._flightpath = np.append(
-                self._flightpath, vector_t(*p), axis=1)
+                self._flightpath, utils.vector_t(*p), axis=1)
 
         self._setup_paths()
         self._flight_parameters = params
@@ -106,14 +104,15 @@ class PropagationPath():
             fs=48000,
             max_amp=1.0,
             c=330,
-            frame_len=512
+            frame_len=512,
+            N=2
     ):
 
         self.max_amp = max_amp
         self.c = c
         self.fs = fs
         self.reflection_surface = reflection_surface
-        self.theta, self.phi, self.r = cart_to_sph(flightpath)
+        self.theta, self.phi, self.r = utils.cart_to_sph(flightpath)
 
         # calculate delays and amplitude curve
         delays = (self.r / self.c) * self.fs
@@ -127,6 +126,7 @@ class PropagationPath():
                 self.phi, self.frame_len)[::self.hop_len].mean(1)
         self.theta_per_frame = np.lib.stride_tricks.sliding_window_view(
                 self.theta, self.frame_len)[::self.hop_len].mean(1)
+        self.N = N
 
     def apply_doppler(self, x):
         # init output array and initial read position
@@ -135,7 +135,7 @@ class PropagationPath():
 
         for i in range(len(out)):
             # find whole and fractional part
-            n, s, = nearest_whole_fraction(read_pointer)
+            n, s, = utils.nearest_whole_fraction(read_pointer)
             # negative s for correct indexing over n
             out[i] = interpolators.interpolate(x, n, -s)
 
@@ -170,14 +170,37 @@ class PropagationPath():
 
         return x_out
 
+    def spatialise(self, x):
+        # do not spatialise if order not set (mono output)
+        if self.N is None:
+            return x
+
+        x_windowed = np.lib.stride_tricks.sliding_window_view(
+            x, self.frame_len)[::self.hop_len] * np.hanning(self.frame_len)
+
+        x_out = np.zeros((len(x), (self.N+1)**2))
+
+        for i, (theta, phi, frame) \
+                in enumerate(zip(self.theta_per_frame,
+                                 self.phi_per_frame,
+                                 x_windowed)):
+
+            frame_index = i * self.hop_len
+            Y_mn = utils.Y_array(self.N, np.array([theta]), np.array([phi]))
+            x_out[frame_index:frame_index + self.frame_len] += (frame * Y_mn).T
+
+        return x_out
+
     def process(self, x):
         if len(x) < len(self.r):
             raise ValueError('Input signal shorter than path to be rendered')
 
         return \
-            self.ground_effect(
-                self.apply_amp_env(
-                    self.apply_doppler(x)
+            self.spatialise(
+                self.ground_effect(
+                    self.apply_amp_env(
+                        self.apply_doppler(x)
+                    )
                 )
             )
 

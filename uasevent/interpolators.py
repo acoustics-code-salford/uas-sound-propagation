@@ -72,10 +72,13 @@ class SincInterpolator(FractionalInterpolator):
         h *= np.blackman(N - delta)
         # normalise for unity gain
         h /= np.sum(h)
-        return h
+        return np.expand_dims(h, 1)
 
     def _calc_delayed(self, x):
-        return sig.fftconvolve(x, self.h, 'same')
+        if x.ndim == 1:
+            x = np.expand_dims(x, 1)
+        y = sig.fftconvolve(x, self.h, 'same')
+        return np.squeeze(y)
 
 
 def interpolate(
