@@ -89,7 +89,7 @@ def Y(m, n, theta, phi):
 
 
 def Y_array(N, theta, phi):
-    Y_mn = np.zeros([(N + 1) ** 2, 1])
+    Y_mn = np.zeros([(N + 1) ** 2, len(theta)])
     for i in range((N + 1) ** 2):
         n = math.isqrt(i)
         m = i - (n ** 2) - n
