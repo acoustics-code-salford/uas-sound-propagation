@@ -21,7 +21,6 @@ sounddevice = "^0.4.6"
 flake8 = "^6.1.0"
 seaborn = "^0.13.0"
 coverage = "^7.3.2"
-llvmlite = "^0.41.1"
 
 [build-system]
 requires = ["poetry-core"]
