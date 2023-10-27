@@ -34,9 +34,8 @@ jobs:
   
       - name: Install dependencies
         run: |
+          sudo apt-get install libsndfile1 libsndfile1-dev
           poetry config virtualenvs.in-project true
           poetry install
-          sudo apt-get install libsndfile1 libsndfile1-dev
-        
       - name: Test
         run: poetry run python -m unittest
