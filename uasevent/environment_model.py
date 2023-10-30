@@ -109,24 +109,26 @@ class PropagationPath():
     ):
 
         self.max_amp = max_amp
-        self.c = c
         self.fs = fs
         self.reflection_surface = reflection_surface
-        self.theta, self.phi, self.r = utils.cart_to_sph(flightpath)
 
         # calculate delays and amplitude curve
-        delays = (self.r / self.c) * self.fs
+        _, _, r = utils.cart_to_sph(flightpath)
+        delays = (r / c) * self.fs
         self.init_delay = delays[0]
         self.delta_delays = np.diff(delays)
-        self.amp_env = 1 / (self.r**2)
+        self.amp_env = 1 / (r**2)
 
         self.frame_len = frame_len
         self.hop_len = frame_len // 2
-        self.phi_per_frame = np.lib.stride_tricks.sliding_window_view(
-                self.phi, self.frame_len)[::self.hop_len].mean(1)
-        self.theta_per_frame = np.lib.stride_tricks.sliding_window_view(
-                self.theta, self.frame_len)[::self.hop_len].mean(1)
         self.N = N
+
+        # calculate angles per frame for reflection filter and spatialisation
+        position_per_frame = np.lib.stride_tricks.sliding_window_view(
+            flightpath, self.frame_len, 1)[:, ::self.hop_len].mean(2)
+
+        self.theta_per_frame, self.phi_per_frame, _ = \
+            utils.cart_to_sph(position_per_frame)
 
     def apply_doppler(self, x):
         # init output array and initial read position
@@ -192,7 +194,7 @@ class PropagationPath():
         return x_out
 
     def process(self, x):
-        if len(x) < len(self.r):
+        if len(x) < len(self.delta_delays + 1):
             raise ValueError('Input signal shorter than path to be rendered')
 
         return \
