@@ -107,6 +107,10 @@ class TestRender(unittest.TestCase):
         renderer_2 = UASEventRenderer(params_2, 'asphalt', fs, 1.5)
         self.xout_2 = renderer_2.render(self.x)
 
+        params_3 = utils.load_params('tests/test_flight_3.csv')
+        renderer_3 = UASEventRenderer(params_3, 'asphalt', fs, 1.5)
+        self.xout_3 = renderer_3.render(self.x)
+
     def test_output_sensible(self):
         # rendering should equal length of calculated trajectory
         self.assertEqual(len(self.renderer._flightpath.T), len(self.xout))
@@ -123,4 +127,10 @@ class TestRender(unittest.TestCase):
         self.assertTrue((self.renderer.r[:n] == 0).all())
 
         # rendering of greater distance should have lower max amplitude
-        self.assertGreater(np.max(abs(self.xout)), np.max(abs(self.xout_2)))
+        self.assertGreater(np.max(abs(self.xout)), np.max(abs(self.xout_3)))
+
+        # rendering of flight along Y should result in zero signal in Y channel
+        self.assertAlmostEqual(self.xout.T[1].sum(), 0)
+
+        # rendering of flight along X should result in zero signal in X channel
+        self.assertAlmostEqual(self.xout_2.T[3].sum(), 0)
