@@ -265,3 +265,50 @@ class GroundReflectionFilter():
         angle = round(angle)
         h = self.filterbank[angle - 1]
         return signal.fftconvolve(x, h, 'same')
+
+
+class AtmosphericAbsorptionFilter():
+    def __init__(self,
+                 freqs,
+                 temp=20,
+                 humidity=80,
+                 pressure=101.325):
+
+        self.attenuation = self.alpha(freqs, temp, humidity, pressure)
+
+    def alpha(self, freqs, temp=20, humidity=80, pressure=101.325):
+        '''Atmospheric absorption curves calculated as per ISO 19613-1'''
+        # calculate temperatre variables
+        kelvin = 273.15
+        T_ref = kelvin + 20
+        T_kel = kelvin + temp
+        T_rel = T_kel / T_ref
+        T_01 = kelvin + 0.01
+
+        # calculate pressure variables
+        p_ref = 101.325
+        p_rel = pressure / p_ref
+
+        # calculate humidity as molar concentration of water vapour
+        C = -6.8346 * (T_01 / T_kel) ** 1.261 + 4.6151
+        p_sat_by_p_ref = 10 ** C
+        h = humidity * p_sat_by_p_ref * p_rel
+
+        # calcuate relaxataion frequencies of atmospheric gases
+        f_rO = p_rel * (
+            24 + 4.04e4 * h * (0.02 + h) / (0.391 + h)
+        )
+
+        f_rN = p_rel / np.sqrt(T_rel) * (
+            9 + 280 * h * np.exp(-4.17 * (T_rel ** (-1/3) - 1))
+        )
+
+        # calculate alpha
+        xc = 1.84e-11 / p_rel * np.sqrt(T_rel)
+        xo = 1.275e-2 * np.exp(-2239.1 / T_kel) * (
+            f_rO + (freqs**2 / f_rO)) ** (-1)
+        xn = 0.1068 * np.exp(-3352 / T_kel) * (
+            f_rN + (freqs**2 / f_rN)) ** (-1)
+
+        return 20 * np.log10(np.e) * \
+            freqs**2 * (xc + T_rel**(-5/2) * (xo + xn))
