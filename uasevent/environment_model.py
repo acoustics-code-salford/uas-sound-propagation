@@ -277,7 +277,7 @@ class AtmosphericAbsorptionFilter():
         self.attenuation = self.alpha(freqs, temp, humidity, pressure)
 
     def alpha(self, freqs, temp=20, humidity=80, pressure=101.325):
-        '''Atmospheric absorption curves calculated as per ISO 19613-1'''
+        '''Atmospheric absorption curves calculated as per ISO 9613-1'''
         # calculate temperatre variables
         kelvin = 273.15
         T_ref = kelvin + 20
@@ -310,5 +310,5 @@ class AtmosphericAbsorptionFilter():
         xn = 0.1068 * np.exp(-3352 / T_kel) * (
             f_rN + (freqs**2 / f_rN)) ** (-1)
 
-        return 20 * np.log10(np.e) * \
-            freqs**2 * (xc + T_rel**(-5/2) * (xo + xn))
+        alpha = freqs**2 * (xc + T_rel**(-5/2) * (xo + xn))
+        return 1-alpha
