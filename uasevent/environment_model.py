@@ -170,7 +170,7 @@ class PropagationPath():
 
             # apply ground filter if set
             if self.reflection_surface is not None:
-                angle = np.round(np.rad2deg(np.pi - angle))  # reflection angle
+                angle = np.pi - angle  # reflection angle
                 frame = refl_filter.filter(frame, angle)
 
             frame_index = i * self.hop_len
@@ -230,7 +230,6 @@ class GroundReflectionFilter():
         self.material = material
         self.fs = fs
         self.n_taps = n_taps
-        self.filterbank = self._compute_filterbank()
 
     @property
     def material(self):
@@ -252,24 +251,15 @@ class GroundReflectionFilter():
         X = -11.9 * (self.freqs / self._sigma) ** -0.73
         return (R + 1j*X) * self.Z_0
 
-    def _R(self):
+    def _R(self, angle):
         return np.real(
-            np.array([
-                (self._Z() * np.cos(p) - self.Z_0) /
-                (self._Z() * np.cos(p) + self.Z_0)
-                for p in self.phi
-            ])
-        ).squeeze()
-
-    def _compute_filterbank(self):
-        return np.array([
-            signal.firls(self.n_taps, self.freqs, abs(r), fs=self.fs)
-            for r in self._R()
-        ])
+            (self._Z() * np.cos(angle) - self.Z_0)
+            / (self._Z() * np.cos(angle) + self.Z_0)
+        )
 
     def filter(self, x, angle):
-        angle = round(angle)
-        h = self.filterbank[angle - 1]
+        h = signal.firls(self.n_taps, self.freqs,
+                         utils.rectify(self._R(angle)), fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
 
 
