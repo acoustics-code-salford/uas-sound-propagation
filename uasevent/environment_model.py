@@ -123,11 +123,11 @@ class PropagationPath():
         self.hop_len = frame_len // 2
         self.N = N
 
-        # calculate angles per frame for reflection filter and spatialisation
+        # calculate spherical co-ordinates per frame
+        # for filters and spatialisation
         position_per_frame = np.lib.stride_tricks.sliding_window_view(
             flightpath, self.frame_len, 1)[:, ::self.hop_len].mean(2)
-
-        self.theta_per_frame, self.phi_per_frame, _ = \
+        self.theta_per_frame, self.phi_per_frame, self.r_per_frame = \
             utils.cart_to_sph(position_per_frame)
 
     def apply_doppler(self, x):
@@ -149,26 +149,32 @@ class PropagationPath():
     def apply_amp_env(self, x):
         return x * self.amp_env
 
-    def ground_effect(self, x):
-        # do not apply filter if surface not set (direct path)
-        if self.reflection_surface is None:
-            return x
+    def absorbtion_effects(self, x):
+        '''Apply frequency-dependent atmospheric and ground absorption'''
 
         # neat trick to get windowed frames
         x_windowed = np.lib.stride_tricks.sliding_window_view(
             x, self.frame_len)[::self.hop_len] * np.hanning(self.frame_len)
 
-        refl_filter = GroundReflectionFilter(material=self.reflection_surface)
+        atmos_filter = AtmosphericAbsorptionFilter()
+        # init ground filter if surface is set (reflected path)
+        if self.reflection_surface is not None:
+            refl_filter = GroundReflectionFilter(self.reflection_surface)
 
         x_out = np.zeros(len(x))
-        for i, (angle, frame) \
-                in enumerate(zip(self.phi_per_frame, x_windowed)):
+        for i, (r, angle, frame) in enumerate(
+                zip(self.r_per_frame, self.phi_per_frame, x_windowed)):
+
+            # apply atmospheric absorption filter
+            frame = atmos_filter.filter(frame, r)
+
+            # apply ground filter if set
+            if self.reflection_surface is not None:
+                angle = np.round(np.rad2deg(np.pi - angle))  # reflection angle
+                frame = refl_filter.filter(frame, angle)
 
             frame_index = i * self.hop_len
-            angle = np.round(np.rad2deg(np.pi - angle))  # reflection angle
-
-            x_out[frame_index:frame_index + self.frame_len] += \
-                refl_filter.filter(frame, angle)
+            x_out[frame_index:frame_index + self.frame_len] += frame
 
         return x_out
 
@@ -199,7 +205,7 @@ class PropagationPath():
 
         return \
             self.spatialise(
-                self.ground_effect(
+                self.absorbtion_effects(
                     self.apply_amp_env(
                         self.apply_doppler(x)
                     )
@@ -210,9 +216,9 @@ class PropagationPath():
 class GroundReflectionFilter():
     def __init__(
             self,
+            material='asphalt',
             freqs=np.geomspace(20, 24000),
             angles=np.arange(1, 91),
-            material='asphalt',
             Z_0=413.26,
             fs=48000,
             n_taps=21
@@ -269,12 +275,17 @@ class GroundReflectionFilter():
 
 class AtmosphericAbsorptionFilter():
     def __init__(self,
-                 freqs,
+                 freqs=np.geomspace(20, 24000),
                  temp=20,
                  humidity=80,
-                 pressure=101.325):
+                 pressure=101.325,
+                 n_taps=21,
+                 fs=48000):
 
         self.attenuation = self.alpha(freqs, temp, humidity, pressure)
+        self.n_taps = n_taps
+        self.freqs = freqs
+        self.fs = fs
 
     def alpha(self, freqs, temp=20, humidity=80, pressure=101.325):
         '''Atmospheric absorption curves calculated as per ISO 9613-1'''
@@ -311,4 +322,10 @@ class AtmosphericAbsorptionFilter():
             f_rN + (freqs**2 / f_rN)) ** (-1)
 
         alpha = freqs**2 * (xc + T_rel**(-5/2) * (xo + xn))
-        return 1-alpha
+        return 1 - alpha
+
+    def filter(self, x, distance):
+        h = signal.firls(self.n_taps, self.freqs,
+                         self.attenuation**distance,
+                         fs=self.fs)
+        return signal.fftconvolve(x, h, 'same')
