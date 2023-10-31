@@ -106,3 +106,7 @@ def SN3D(m, n):
             )
         )
     )
+
+
+def rectify(x):
+    return (np.abs(x) + x) / 2
