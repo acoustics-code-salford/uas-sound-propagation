@@ -9,7 +9,7 @@ class UASEventRenderer():
             flight_parameters,
             ground_material='grass',
             fs=48000,
-            receiver_height=1.5,
+            receiver_height=1.5
             ) -> None:
 
         self.fs = fs
@@ -36,8 +36,8 @@ class UASEventRenderer():
         reflection_zeros = np.zeros_like(reflection)
         reflection_zeros[whole_offset:] += reflection[:-whole_offset]
         reflection = reflection_zeros
-        self.d = direct
-        self.r = reflection
+        self.d = direct.T
+        self.r = reflection.T
         return direct + reflection
 
     @property
@@ -105,32 +105,45 @@ class PropagationPath():
             max_amp=1.0,
             c=330,
             frame_len=512,
-            N=2
+            loudspeaker_arrangement='Octagon + Cube'
     ):
 
         self.max_amp = max_amp
         self.fs = fs
         self.reflection_surface = reflection_surface
+        self.frame_len = frame_len
+        self.hop_len = frame_len // 2
+
+        # load loudspeaker layout
+        _, th, ph, r = utils.load_mapping('Octagon + Cube')
+        self.loudspeaker_locations = utils.sph_to_cart(np.array([th, ph, r]).T)
+
+        # calculate amplitude envelopes for each loudspeaker
+        self.flightpath = flightpath
+        self.calculate_amp_envs()
 
         # calculate delays and amplitude curve
         _, _, r = utils.cart_to_sph(flightpath)
         delays = (r / c) * self.fs
         self.init_delay = delays[0]
         self.delta_delays = np.diff(delays)
-        self.amp_env = 1 / (r**2)
 
-        self.frame_len = frame_len
-        self.hop_len = frame_len // 2
-        self.N = N
-
-        # calculate spherical co-ordinates per frame
-        # for filters and spatialisation
-        self.position_per_frame = utils.cart_to_sph(
+        # calculate angles per frame for filters
+        self.sph_per_frame = utils.cart_to_sph(
             np.lib.stride_tricks.sliding_window_view(
                 flightpath, self.frame_len, 1)[:, ::self.hop_len].mean(2)
         ).T
-        # self.theta_per_frame, self.phi_per_frame, self.r_per_frame = \
-        #     utils.cart_to_sph(position_per_frame)
+
+    def calculate_amp_envs(self):
+        '''Calculate amplitude envelopes depending on loudspeaker positions
+        according to the Distance-Based Amplitude Panning (DBAP) method.'''
+        d_n = np.array(
+            [np.linalg.norm(self.loudspeaker_locations - pos, axis=1)
+             for pos in self.flightpath.T]
+            )
+        g_n_i = 1 / d_n**2
+        g_n_i /= np.max(abs(g_n_i)) * self.max_amp  # !
+        self.amp_envs = g_n_i.T
 
     def apply_doppler(self, x):
         # init output array and initial read position
@@ -148,8 +161,8 @@ class PropagationPath():
 
         return out
 
-    def apply_amp_env(self, x):
-        return x * self.amp_env
+    def apply_amp_envs(self, x):
+        return x * self.amp_envs
 
     def filter(self, x):
         '''Apply frequency-dependent atmospheric and ground absorption'''
@@ -168,12 +181,10 @@ class PropagationPath():
         if self.reflection_surface is not None:
             filters.append(GroundReflectionFilter(self.reflection_surface))
 
-        # add spatialiser (must be last as adds channels)
-        filters.append(SpatialFilter(self.N))
+        x_out = np.zeros(len(x))
 
-        x_out = np.zeros((len(x), (self.N+1)**2))
         for i, (position, frame) in enumerate(
-                zip(self.position_per_frame, x_windowed)):
+                zip(self.sph_per_frame, x_windowed)):
 
             for filter in filters:
                 frame = filter.filter(frame, position)
@@ -188,14 +199,14 @@ class PropagationPath():
             raise ValueError('Input signal shorter than path to be rendered')
 
         return \
-            self.filter(
-                self.apply_amp_env(
+            self.apply_amp_envs(
+                self.filter(
                     self.apply_doppler(x)
                 )
             )
 
 
-class SpatialFilter():
+class AmbiSpatialiser():
     def __init__(self, N=2):
         self.N = N
 
@@ -205,19 +216,38 @@ class SpatialFilter():
         return (x * Y_mn).T
 
 
+class VBAPSpatialiser():
+    def __init__(self, loudspeaker_layout='Octagon + Cube'):
+        ch, theta, phi, _ = \
+            utils.load_mapping(loudspeaker_layout)
+        self.loudspeaker_cart = utils.sph_to_cart(
+            np.array([theta, phi]).T
+        )
+        self.n_channels = len(ch)
+
+    def filter(self, x, position):
+        p = utils.sph_to_cart(np.array([position[:2]]))
+        # find three nearest loudspeaker positions
+        selected_loudspeakers = np.linalg.norm(
+            p - self.loudspeaker_cart, axis=1).argsort()[:3]
+        L = self.loudspeaker_cart[selected_loudspeakers]
+        g = p @ L
+        g /= np.linalg.norm(g)
+
+        array_gains = np.zeros((len(self.loudspeaker_cart), 1))
+        array_gains[selected_loudspeakers] = g.T
+        return (x * array_gains).T
+
+
 class GroundReflectionFilter():
-    def __init__(
-            self,
-            material='asphalt',
-            freqs=np.geomspace(20, 24000),
-            angles=np.arange(1, 91),
-            Z_0=413.26,
-            fs=48000,
-            n_taps=21
-            ):
+    def __init__(self,
+                 material='asphalt',
+                 freqs=np.geomspace(20, 24000),
+                 Z_0=413.26,
+                 fs=48000,
+                 n_taps=21):
 
         self.freqs = freqs
-        self.phi = np.deg2rad(angles)
         self.Z_0 = Z_0
         self.material = material
         self.fs = fs
@@ -253,7 +283,8 @@ class GroundReflectionFilter():
         _, phi, _ = position
         phi = np.pi - phi
         h = signal.firls(self.n_taps, self.freqs,
-                         utils.rectify(self._R(phi)), fs=self.fs)
+                         utils.rectify(self._R(phi)),
+                         fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
 
 
