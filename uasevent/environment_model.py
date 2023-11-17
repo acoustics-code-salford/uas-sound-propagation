@@ -28,17 +28,17 @@ class UASEventRenderer():
 
         # calculate whole and fractional number of samples to delay reflection
         whole_offset, frac_offset = utils.nearest_whole_fraction(offset)
-        # calculate fractional delay of reflection
+        # calculate fractional delay of reflection)
         reflection = np.array([
             i for i in interpolators.SincInterpolator(reflection, frac_offset)
         ])
         # add zeros to start of reflection to account for whole sample delay
         reflection_zeros = np.zeros_like(reflection)
-        reflection_zeros[whole_offset:] += reflection[:-whole_offset]
+        reflection_zeros[:, whole_offset:] += reflection[:, :-whole_offset]
         reflection = reflection_zeros
         self.d = direct.T
         self.r = reflection.T
-        return direct + reflection
+        return direct.T + reflection.T
 
     @property
     def receiver_height(self):
@@ -95,6 +95,10 @@ class UASEventRenderer():
             self.fs
         )
 
+        norm_scaling = np.max(abs(self.direct_path.inv_sqr_attn))
+        self.direct_path.inv_sqr_attn /= norm_scaling
+        self.ground_reflection.inv_sqr_attn /= norm_scaling
+
 
 class PropagationPath():
     def __init__(
@@ -102,13 +106,11 @@ class PropagationPath():
             flightpath,
             reflection_surface=None,
             fs=48000,
-            max_amp=1.0,
             c=330,
             frame_len=512,
             loudspeaker_arrangement='Octagon + Cube'
     ):
 
-        self.max_amp = max_amp
         self.fs = fs
         self.reflection_surface = reflection_surface
         self.frame_len = frame_len
@@ -127,6 +129,7 @@ class PropagationPath():
         delays = (r / c) * self.fs
         self.init_delay = delays[0]
         self.delta_delays = np.diff(delays)
+        self.inv_sqr_attn = 1 / r**2
 
         # calculate angles per frame for filters
         self.sph_per_frame = utils.cart_to_sph(
@@ -141,9 +144,9 @@ class PropagationPath():
             [np.linalg.norm(self.loudspeaker_locations - pos, axis=1)
              for pos in self.flightpath.T]
             )
-        g_n_i = 1 / d_n**2
-        g_n_i /= np.max(abs(g_n_i)) * self.max_amp  # !
-        self.amp_envs = g_n_i.T
+        # g_n_i = 1 / d_n**2
+        g_n_i = 1 / (d_n.T * np.sqrt(np.sum(1 / d_n**2, axis=1)))
+        self.amp_envs = g_n_i
 
     def apply_doppler(self, x):
         # init output array and initial read position
@@ -162,7 +165,7 @@ class PropagationPath():
         return out
 
     def apply_amp_envs(self, x):
-        return x * self.amp_envs
+        return x * self.amp_envs * self.inv_sqr_attn
 
     def filter(self, x):
         '''Apply frequency-dependent atmospheric and ground absorption'''
