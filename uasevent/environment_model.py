@@ -108,7 +108,7 @@ class PropagationPath():
             fs=48000,
             c=330,
             frame_len=512,
-            loudspeaker_arrangement='Octagon + Cube'
+            loudspeaker_mapping='Octagon + Cube'
     ):
 
         self.fs = fs
@@ -117,12 +117,12 @@ class PropagationPath():
         self.hop_len = frame_len // 2
 
         # load loudspeaker layout
-        _, th, ph, r = utils.load_mapping('Octagon + Cube')
+        _, th, ph, r = utils.load_mapping(loudspeaker_mapping)
         self.loudspeaker_locations = utils.sph_to_cart(np.array([th, ph, r]).T)
 
         # calculate amplitude envelopes for each loudspeaker
         self.flightpath = flightpath
-        self.calculate_amp_envs()
+        self.amp_envs = self.calculate_amp_envs(self.loudspeaker_locations)
 
         # calculate delays and amplitude curve
         _, _, r = utils.cart_to_sph(flightpath)
@@ -137,16 +137,12 @@ class PropagationPath():
                 flightpath, self.frame_len, 1)[:, ::self.hop_len].mean(2)
         ).T
 
-    def calculate_amp_envs(self):
-        '''Calculate amplitude envelopes depending on loudspeaker positions
-        according to the Distance-Based Amplitude Panning (DBAP) method.'''
-        d_n = np.array(
-            [np.linalg.norm(self.loudspeaker_locations - pos, axis=1)
-             for pos in self.flightpath.T]
-            )
-        # g_n_i = 1 / d_n**2
-        g_n_i = 1 / (d_n.T * np.sqrt(np.sum(1 / d_n**2, axis=1)))
-        self.amp_envs = g_n_i
+    def calculate_amp_envs(self, loudspeaker_locs):
+        dbap = DBAP(loudspeaker_locs)
+        fpath = np.copy(self.flightpath)
+        fpath = (fpath / np.linalg.norm(fpath, axis=0)) *\
+            np.mean(np.linalg.norm(dbap.ls_pos, axis=0))
+        return dbap.gains(fpath.T)
 
     def apply_doppler(self, x):
         # init output array and initial read position
@@ -165,7 +161,7 @@ class PropagationPath():
         return out
 
     def apply_amp_envs(self, x):
-        return x * self.amp_envs * self.inv_sqr_attn
+        return x * self.inv_sqr_attn * self.amp_envs
 
     def filter(self, x):
         '''Apply frequency-dependent atmospheric and ground absorption'''
@@ -207,39 +203,6 @@ class PropagationPath():
                     self.apply_doppler(x)
                 )
             )
-
-
-class AmbiSpatialiser():
-    def __init__(self, N=2):
-        self.N = N
-
-    def filter(self, x, position):
-        theta, phi, _ = position
-        Y_mn = utils.Y_array(self.N, np.array([theta]), np.array([phi]))
-        return (x * Y_mn).T
-
-
-class VBAPSpatialiser():
-    def __init__(self, loudspeaker_layout='Octagon + Cube'):
-        ch, theta, phi, _ = \
-            utils.load_mapping(loudspeaker_layout)
-        self.loudspeaker_cart = utils.sph_to_cart(
-            np.array([theta, phi]).T
-        )
-        self.n_channels = len(ch)
-
-    def filter(self, x, position):
-        p = utils.sph_to_cart(np.array([position[:2]]))
-        # find three nearest loudspeaker positions
-        selected_loudspeakers = np.linalg.norm(
-            p - self.loudspeaker_cart, axis=1).argsort()[:3]
-        L = self.loudspeaker_cart[selected_loudspeakers]
-        g = p @ L
-        g /= np.linalg.norm(g)
-
-        array_gains = np.zeros((len(self.loudspeaker_cart), 1))
-        array_gains[selected_loudspeakers] = g.T
-        return (x * array_gains).T
 
 
 class GroundReflectionFilter():
@@ -348,3 +311,46 @@ class AtmosphericAbsorptionFilter():
                          self.attenuation**r,
                          fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
+
+
+class DBAP():
+    '''Calculate DBAP amplitude envelopes.
+    Based on https://github.com/PasqualeMainolfi/Pannix/'''
+    def __init__(self, loudspeaker_locs):
+        self.ls_pos = loudspeaker_locs.T
+        self.spat_blur = np.mean(np.linalg.norm(self.ls_pos, axis=0)) + 0.2
+        self.eta = self.spat_blur / len(self.ls_pos.T)
+
+    def loudspeaker_distance(self, pos_arr):
+        return np.array(
+            [
+                np.sqrt(
+                    np.sum(
+                        (self.ls_pos.T - pos)**2, axis=1
+                    ) + self.spat_blur**2
+                )
+                for pos in pos_arr
+            ])
+
+    def b(self, d):
+        u = d.T - d.max(axis=1)
+        u_norm = np.linalg.norm(u, axis=0)
+        u = u/u_norm
+        u = u**2 + self.eta
+        um = np.median(d, axis=1)
+        return (2*u / um)**2 + 1
+
+    def k(self, b, d):
+        k_den = np.sqrt(
+            np.sum(
+                (b**2).T /
+                (d**2), axis=1
+            )
+        )
+        return 1 / k_den
+
+    def gains(self, pos_arr):
+        d = self.loudspeaker_distance(pos_arr)
+        b = self.b(d)
+        k = self.k(b, d)
+        return (k * b) / d.T

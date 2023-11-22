@@ -109,7 +109,7 @@ class TestRender(unittest.TestCase):
 
     def test_output_sensible(self):
         # rendering should equal length of calculated trajectory
-        self.assertEqual(len(self.renderer._flightpath.T), len(self.xout.T))
+        self.assertEqual(len(self.renderer._flightpath.T), len(self.xout))
 
         # direct path should have higher power than reflection
         self.assertGreater(np.sum(abs(self.renderer.d)),
