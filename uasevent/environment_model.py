@@ -9,9 +9,10 @@ class UASEventRenderer():
             flight_parameters,
             ground_material='grass',
             fs=48000,
-            receiver_height=1.5
-            ) -> None:
+            receiver_height=1.5,
+            loudspeaker_mapping='Octagon + Cube'):
 
+        self.loudspeaker_mapping = loudspeaker_mapping
         self.fs = fs
         self.receiver_height = receiver_height
         self.ground_material = ground_material
@@ -83,7 +84,8 @@ class UASEventRenderer():
                  self._flightpath[2:] - self.receiver_height)
             ),
             None,
-            self.fs
+            self.fs,
+            loudspeaker_mapping=self.loudspeaker_mapping
         )
 
         self.ground_reflection = PropagationPath(
@@ -92,7 +94,8 @@ class UASEventRenderer():
                  - self._flightpath[2:] - self.receiver_height)
             ),
             self.ground_material,
-            self.fs
+            self.fs,
+            loudspeaker_mapping=self.loudspeaker_mapping
         )
 
         norm_scaling = np.max(abs(self.direct_path.inv_sqr_attn))
@@ -106,7 +109,7 @@ class PropagationPath():
             flightpath,
             reflection_surface=None,
             fs=48000,
-            c=330,
+            c=343,
             frame_len=512,
             loudspeaker_mapping='Octagon + Cube'
     ):
@@ -140,6 +143,7 @@ class PropagationPath():
     def calculate_amp_envs(self, loudspeaker_locs):
         dbap = DBAP(loudspeaker_locs)
         fpath = np.copy(self.flightpath)
+        # clip flightpath to (approximate) surface of array convex hull
         fpath = (fpath / np.linalg.norm(fpath, axis=0)) *\
             np.mean(np.linalg.norm(dbap.ls_pos, axis=0))
         return dbap.gains(fpath.T)
