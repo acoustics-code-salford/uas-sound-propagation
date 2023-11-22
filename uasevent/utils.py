@@ -1,4 +1,5 @@
 import math
+import json
 import numpy as np
 import scipy.special as sp
 
@@ -110,3 +111,36 @@ def SN3D(m, n):
 
 def rectify(x):
     return (np.abs(x) + x) / 2
+
+
+def load_mapping(name, mapping_file='mappings/mappings.json'):
+    with open(mapping_file, 'r') as file:
+        mapping = json.load(file)[name]
+        channel_numbers = [int(key) for key in mapping.keys()]
+        theta = np.radians(
+            [float(x['azimuth']) for x in mapping.values()]
+        )
+        phi = np.radians(
+            [float(x['elevation']) for x in mapping.values()]
+        )
+        distances = np.array(
+            [float(x['distance']) for x in mapping.values()]
+        )
+        return [channel_numbers, theta, phi, distances]
+
+
+def sph_to_cart(sph_co_ords):
+
+    # allow for lack of r value (i.e. for unit sphere)
+    if sph_co_ords.shape[1] < 3:
+        theta, phi = sph_co_ords[:, 0], sph_co_ords[:, 1]
+        r = 1
+
+    else:
+        theta, phi, r = sph_co_ords[:, 0], sph_co_ords[:, 1], sph_co_ords[:, 2]
+
+    x = r * np.cos(theta) * np.sin(phi)
+    y = r * np.sin(theta) * np.sin(phi)
+    z = r * np.cos(phi)
+
+    return np.array([x, y, z]).T
