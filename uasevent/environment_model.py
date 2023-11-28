@@ -34,9 +34,10 @@ class UASEventRenderer():
             i for i in interpolators.SincInterpolator(reflection, frac_offset)
         ])
         # add zeros to start of reflection to account for whole sample delay
-        reflection_zeros = np.zeros_like(reflection)
-        reflection_zeros[:, whole_offset:] += reflection[:, :-whole_offset]
-        reflection = reflection_zeros
+        if whole_offset:
+            reflection_zeros = np.zeros_like(reflection)
+            reflection_zeros[:, whole_offset:] += reflection[:, :-whole_offset]
+            reflection = reflection_zeros
         self.d = direct.T
         self.r = reflection.T
         return direct.T + reflection.T
@@ -98,9 +99,9 @@ class UASEventRenderer():
             loudspeaker_mapping=self.loudspeaker_mapping
         )
 
-        norm_scaling = np.max(abs(self.direct_path.inv_sqr_attn))
-        self.direct_path.inv_sqr_attn /= norm_scaling
-        self.ground_reflection.inv_sqr_attn /= norm_scaling
+        self._norm_scaling = np.max(abs(self.direct_path.inv_sqr_attn))
+        self.direct_path.inv_sqr_attn /= self._norm_scaling
+        self.ground_reflection.inv_sqr_attn /= self._norm_scaling
 
 
 class PropagationPath():
