@@ -1,7 +1,5 @@
-import math
 import json
 import numpy as np
-import scipy.special as sp
 
 
 def test_sine(t, f_0=440, A=0.75, fs=48000):
@@ -23,7 +21,7 @@ def load_params(csv_file):
         dtype='str'
     ).reshape(-1, 3)  # reshape in case of single-event flight
 
-    return [[np.array(cell.strip().split(' '), dtype=int)
+    return [[np.array(cell.strip().split(' '), dtype=float)
             for cell in row]
             for row in str_params]
 
@@ -72,41 +70,6 @@ def vector_t(start, end, speeds, fs=48000):
     # map to axes
     xyz = (start + vector * x_t).T
     return xyz
-
-
-def Y(m, n, theta, phi):
-    return (
-        ((-1) ** m) *  # condon-shortley compensation
-        SN3D(m, n) *
-        np.array(
-            [sp.lpmn(abs(m), n, np.sin(phi))[0][abs(m), n]
-                for phi in phi]
-        ) *
-        (
-            np.cos(m * theta)
-            if m >= 0 else np.sin((-m) * theta)
-        )
-    )
-
-
-def Y_array(N, theta, phi):
-    Y_mn = np.zeros([(N + 1) ** 2, len(theta)])
-    for i in range((N + 1) ** 2):
-        n = math.isqrt(i)
-        m = i - (n ** 2) - n
-        Y_mn[i, :] = Y(m, n, theta, phi).reshape(1, -1)
-    return Y_mn
-
-
-def SN3D(m, n):
-    return (
-        np.sqrt(
-            (2 - (lambda m: 1 if m == 0 else 0)(m)) * (
-                sp.factorial(n - abs(m)) /
-                sp.factorial(n + abs(m))
-            )
-        )
-    )
 
 
 def rectify(x):
