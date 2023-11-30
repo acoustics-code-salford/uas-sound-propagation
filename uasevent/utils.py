@@ -2,7 +2,18 @@ import json
 import numpy as np
 
 
-def test_sine(t, f_0=440, A=0.75, fs=48000):
+def test_sine(t, f_0=440, A=0.75, fs=48_000):
+    '''
+    Generate a sine wave signal of length t.
+    
+        Parameters:
+            t (float): Length of sine signal in seconds
+            f_0 (float): Frequency [Hz] (default 440)
+            A (float): Amplitude (default 0.75)
+            fs (int): Sampling frequency [Hz] (default 48_000)
+        Returns:
+            sig (np.ndarray): Array containing sinusoidal signal.
+    '''
     t_samples = np.linspace(0, t, fs*t)
     sig = np.zeros_like(t_samples)
 
@@ -13,6 +24,7 @@ def test_sine(t, f_0=440, A=0.75, fs=48000):
 
 
 def load_params(csv_file):
+    '''Load flight parameters from a csv file to required array format.'''
     str_params = np.loadtxt(
         csv_file,
         delimiter=',',
@@ -27,6 +39,7 @@ def load_params(csv_file):
 
 
 def nearest_whole_fraction(pos):
+    '''Return nearest integer and fraction to input sample position.'''
     n = np.round(pos).astype(int)
     s = (
         - (- pos % 1)
@@ -47,7 +60,19 @@ def cart_to_sph(xyz, return_r=True):
     return np.array([theta, phi, r]) if return_r else np.array([theta, phi])
 
 
-def vector_t(start, end, speeds, fs=48000):
+def vector_t(start, end, speeds, fs=48_000):
+    '''
+    Calculate source position at each sample time along specified trajectory
+    
+        Parameters:
+            start (array): Cartesian co-ordinates of starting position.
+            end (array): Cartesian co-ordinates of ending position.
+            speeds (array): Start and end speeds of specified flight segment.
+            fs (int): Sampling frequency [Hz] (default 48_000)
+        Returns:
+            xyz (np.ndarray): vector describing position of source at each 
+            sample time based on the specified flight segment
+    '''
     v_0, v_T = speeds
     distance = np.linalg.norm(start - end)
     # heading of source
@@ -73,10 +98,12 @@ def vector_t(start, end, speeds, fs=48000):
 
 
 def rectify(x):
+    '''Rectifies signal (negative segments mirrored into positive).'''
     return (np.abs(x) + x) / 2
 
 
 def load_mapping(name, mapping_file='mappings/mappings.json'):
+    '''Loads specification of loudspeaker position to required array format.'''
     with open(mapping_file, 'r') as file:
         mapping = json.load(file)[name]
         channel_numbers = [int(key) for key in mapping.keys()]
@@ -93,6 +120,7 @@ def load_mapping(name, mapping_file='mappings/mappings.json'):
 
 
 def sph_to_cart(sph_co_ords):
+    '''Converts between spherical and cartesian co-ordinate systems.'''
 
     # allow for lack of r value (i.e. for unit sphere)
     if sph_co_ords.shape[1] < 3:

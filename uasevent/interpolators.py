@@ -4,6 +4,18 @@ import abc
 
 
 class FractionalInterpolator():
+    '''
+    Superclass defining framework for fractional delay interpolators.
+
+    ...
+
+    Attributes
+    ----------
+    x : np.ndarray
+        signal on which to apply the fractional delay
+    delta : float
+        fraction of a sample by which to delay input signal
+    '''
     def __init__(self, x, delta):
         self.delta = delta
         self.x = x
@@ -26,6 +38,18 @@ class FractionalInterpolator():
 
 
 class LinearInterpolator(FractionalInterpolator):
+    '''
+    Class defining linear interpolation method for fractional delay.
+
+    ...
+
+    Attributes
+    ----------
+    x : np.ndarray
+        signal on which to apply the fractional delay
+    delta : float
+        fraction of a sample by which to delay input signal
+    '''
     def _calc_delayed(self, x):
         # roll input for x + 1
         x_rolled = np.roll(x, 1)
@@ -37,6 +61,18 @@ class LinearInterpolator(FractionalInterpolator):
 
 
 class AllpassInterpolator(FractionalInterpolator):
+    '''
+    Class defining allpass filter method for fractional delay.
+
+    ...
+
+    Attributes
+    ----------
+    x : np.ndarray
+        signal on which to apply the fractional delay
+    delta : float
+        fraction of a sample by which to delay input signal
+    '''
     @property
     def delta(self):
         return self._delta
@@ -59,6 +95,18 @@ class AllpassInterpolator(FractionalInterpolator):
 
 
 class SincInterpolator(FractionalInterpolator):
+    '''
+    Class defining sinc interpolation method for fractional delay.
+
+    ...
+
+    Attributes
+    ----------
+    x : np.ndarray
+        signal on which to apply the fractional delay
+    delta : float
+        fraction of a sample by which to delay input signal
+    '''
     def __init__(self, x, delta, N=35):
         self.N = N
         self.h = self.sinc_filter(N, delta)
@@ -87,8 +135,26 @@ def interpolate(
         interp_win_len=64,
         **kwargs
 ):
+    '''
+    Helper function returning a single interpolated sample of an input signal.
+
+        Parameters:
+            x (np.ndarray): signal on which to apply the fractional delay
+            n (int): whole number index to sample
+            s (float): fraction by which to interpolate between samples
+        Returns:
+            value (float): value of interpolated sample
+
+    Attributes
+    ----------
+    x : np.ndarray
+        signal on which to apply the fractional delay
+    delta : float
+        fraction of a sample by which to delay input signal
+    '''
     interp_win = np.arange(n-interp_win_len//2, n+interp_win_len//2)
     x_frame = x[interp_win]
 
     delayed_x_frame = InterpAlgo(x_frame, s, **kwargs)
-    return delayed_x_frame[interp_win_len//2]
+    value = delayed_x_frame[interp_win_len//2]
+    return value
