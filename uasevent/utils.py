@@ -62,7 +62,7 @@ def cart_to_sph(xyz, return_r=True):
 
 def vector_t(start, end, speeds, fs=48_000):
     '''
-    Calculate source position at each sample time along specified trajectory
+    Calculate source position at each sample time along specified trajectory.
     
         Parameters:
             start (array): Cartesian co-ordinates of starting position.

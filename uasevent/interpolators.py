@@ -5,7 +5,7 @@ import abc
 
 class FractionalInterpolator():
     '''
-    Superclass defining framework for fractional delay interpolators.
+    Defines framework for fractional delay interpolators.
 
     ...
 
@@ -39,7 +39,7 @@ class FractionalInterpolator():
 
 class LinearInterpolator(FractionalInterpolator):
     '''
-    Class defining linear interpolation method for fractional delay.
+    Linear interpolation method for fractional delay.
 
     ...
 
@@ -62,7 +62,7 @@ class LinearInterpolator(FractionalInterpolator):
 
 class AllpassInterpolator(FractionalInterpolator):
     '''
-    Class defining allpass filter method for fractional delay.
+    Allpass filter method for fractional delay.
 
     ...
 
@@ -96,7 +96,7 @@ class AllpassInterpolator(FractionalInterpolator):
 
 class SincInterpolator(FractionalInterpolator):
     '''
-    Class defining sinc interpolation method for fractional delay.
+    Sinc interpolation method for fractional delay.
 
     ...
 

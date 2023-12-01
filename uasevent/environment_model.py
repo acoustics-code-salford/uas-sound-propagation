@@ -5,7 +5,7 @@ from . import interpolators, utils
 
 class UASEventRenderer():
     '''
-    Class containing propagation model for rendering of drone flight events.
+    Main propagation model for rendering of drone flight events.
 
     ...
 
@@ -32,26 +32,17 @@ class UASEventRenderer():
             loudspeaker_mapping='Octagon + Cube'):
         '''
         Initialises all necessary attributes for the UASEventRenderer object.
-
-        Parameters
-        ----------
-        flight_parameters : array
-            segment-wise description of flight path
-        ground_material : string
-            string to select absorption coefficients for ground reflection
-        fs : int
-            Sampling frequency in Hz (default 48_000)
-        receiver_height : float
-            Height of receiver position, metres (default 1.5)
-        loudspeaker_mapping : string
-            string to select layout of loudspeaker array for rendering
-            (default 'Octagon + Cube')
         '''
         self.loudspeaker_mapping = loudspeaker_mapping
+        '''Layout of loudspeaker array for rendering'''
         self.fs = fs
+        '''Sampling frequency in Hz (default 48_000)'''
         self.receiver_height = receiver_height
+        '''Height of receiver position, metres (default 1.5)'''
         self.ground_material = ground_material
+        '''Material for ground reflection'''
         self.flight_parameters = flight_parameters
+        '''Segment-wise description of flight path'''
 
     def render(self, x):
         '''
@@ -64,7 +55,7 @@ class UASEventRenderer():
 
         Returns
         -------
-        direct.T + reflection.T : np.ndarray
+        output : np.ndarray
             Signal containing direct and reflected paths reaching receiver.
         '''
         # apply each propagation path to input signal
@@ -88,7 +79,8 @@ class UASEventRenderer():
             reflection = reflection_zeros
         self._d = direct.T
         self._r = reflection.T
-        return direct.T + reflection.T
+        output = direct.T + reflection.T
+        return output
 
     @property
     def receiver_height(self):
@@ -154,7 +146,7 @@ class UASEventRenderer():
 
 class PropagationPath():
     '''
-    Class defining a single propagation path from source to receiver.
+    Defines a single propagation path from source to receiver.
 
     ...
 
@@ -316,8 +308,8 @@ class PropagationPath():
 
 class GroundReflectionFilter():
     '''
-    Class implementing material and incident angle-dependent lowpass filter to
-    simulate ground reflection.
+    Implements material and incident angle-dependent lowpass filter 
+    to simulate ground reflection.
     ...
 
     Attributes
@@ -345,28 +337,18 @@ class GroundReflectionFilter():
         '''
         Initialises all necessary attributes for the GroundReflectionFilter.
 
-        Parameters
-        ----------
-        material : string
-            string to select absorption coefficients for ground reflection
-            (default 'asphalt')
-        freqs : np.ndarray
-            array of frequencies used to evaluate frequency response
-            (default np.geomspace(20, 24000))
-        Z_0 : float
-            characteristic acoustic impedance of air [rayl/m^2]
-            (default 413.26)
-        fs : int
-            Sampling frequency in Hz (default 48_000)
-        n_taps : int
-            Number of taps for FIR filter (default 21)
         '''
 
         self.freqs = freqs
+        '''array of frequencies used to evaluate frequency response'''
         self.Z_0 = Z_0
+        '''characteristic acoustic impedance of air [rayl/m^2]'''
         self.material = material
+        '''string to select absorption coefficients for ground reflection'''
         self.fs = fs
+        '''Sampling frequency in Hz'''
         self.n_taps = n_taps
+        '''Number of taps for FIR filter'''
 
     @property
     def material(self):
@@ -420,7 +402,7 @@ class GroundReflectionFilter():
 
 class AtmosphericAbsorptionFilter():
     '''
-    Class implementing distance-dependent lowpass filter to simulate 
+    Implements distance-dependent lowpass filter to simulate
     atmospheric absorption.
     ...
 
@@ -450,29 +432,17 @@ class AtmosphericAbsorptionFilter():
         '''
         Initialises all necessary attributes for the GroundReflectionFilter.
 
-        Parameters
-        ----------
-        freqs : np.ndarray
-            array of frequencies used to evaluate frequency response
-            (default np.geomspace(20, 24000))
-        temp : float
-            air temperature [degrees celsius] (default 20.0)
-        humidity : float
-            humidity of air [percent] (default 80.0)
-        pressure : float
-            air pressure [kPa] (default 101.325)
-        n_taps : int
-            Number of taps for FIR filter (default 21)
-        fs : int
-            Sampling frequency [Hz] (default 48_000)
         '''
 
-        self.attenuation = self.alpha(freqs, temp, humidity, pressure)
+        self._attenuation = self._alpha(freqs, temp, humidity, pressure)
         self.n_taps = n_taps
+        '''Number of taps for FIR filter'''
         self.freqs = freqs
+        '''array of frequencies used to evaluate frequency response'''
         self.fs = fs
+        '''Sampling frequency [Hz]'''
 
-    def alpha(self, freqs, temp=20, humidity=80, pressure=101.325):
+    def _alpha(self, freqs, temp=20, humidity=80, pressure=101.325):
         '''Atmospheric absorption curves calculated as per ISO 9613-1'''
         # calculate temperatre variables
         kelvin = 273.15
@@ -512,14 +482,14 @@ class AtmosphericAbsorptionFilter():
     def filter(self, x, position):
         _, _, r = position
         h = signal.firls(self.n_taps, self.freqs,
-                         self.attenuation**r,
+                         self._attenuation**r,
                          fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
 
 
 class DBAP():
     '''
-    Class implementing distance-based amplitude panning.
+    Implements distance-based amplitude panning.
     Based on https://github.com/PasqualeMainolfi/Pannix/
     ...
 
