@@ -2,7 +2,24 @@ import json
 import numpy as np
 
 
-def test_sine(t, f_0=440, A=0.75, fs=48000):
+def test_sine(t, f_0=440, A=0.75, fs=48_000):
+    '''
+    Generate a sine wave signal of length t.
+
+    Parameters:
+    -----------
+    `t`: Length of sine signal in seconds
+
+    `f_0`: Frequency [Hz] (default 440)
+
+    `A`: Amplitude (default 0.75)
+
+    `fs`: Sampling frequency [Hz] (default 48_000)
+
+    Returns
+    -------
+    `sig`: Array containing sinusoidal signal.
+    '''
     t_samples = np.linspace(0, t, fs*t)
     sig = np.zeros_like(t_samples)
 
@@ -13,6 +30,7 @@ def test_sine(t, f_0=440, A=0.75, fs=48000):
 
 
 def load_params(csv_file):
+    '''Load flight parameters from a csv file to required array format.'''
     str_params = np.loadtxt(
         csv_file,
         delimiter=',',
@@ -27,6 +45,7 @@ def load_params(csv_file):
 
 
 def nearest_whole_fraction(pos):
+    '''Return nearest integer and fraction to input sample position.'''
     n = np.round(pos).astype(int)
     s = (
         - (- pos % 1)
@@ -37,17 +56,51 @@ def nearest_whole_fraction(pos):
 
 
 def cart_to_sph(xyz, return_r=True):
-    '''Transform between cartesian and polar co-ordinates.'''
+    '''
+    Transform between cartesian and polar co-ordinates.
+
+    Parameters
+    ----------
+    `xyz`: Array of cartesian co-ordinates.
+
+    `return_r`: Bool toggling output of radius. If `False`, only azimuth and
+    elevation will be output.
+
+    Returns
+    -------
+    `sph_coords`: Array of spherical co-ordinates.
+    '''
     r = np.linalg.norm(xyz, axis=0)
     x, y, z = xyz
 
     theta = np.arctan2(y, x) % (2 * np.pi)
     phi = np.arccos(z / r)
 
-    return np.array([theta, phi, r]) if return_r else np.array([theta, phi])
+    sph_coords = np.array([theta, phi, r]) \
+        if return_r else np.array([theta, phi])
+
+    return sph_coords
 
 
-def vector_t(start, end, speeds, fs=48000):
+def vector_t(start, end, speeds, fs=48_000):
+    '''
+    Calculate source position at each sample time along specified trajectory.
+
+    Parameters
+    ----------
+    `start`: Cartesian co-ordinates of starting position.
+
+    `end`: Cartesian co-ordinates of ending position.
+
+    `speeds`: Start and end speeds of specified flight segment.
+
+    `fs`: Sampling frequency [Hz] (default 48_000)
+
+    Returns
+    -------
+    `xyz`: Array describing position of source at each sample time based on
+    the specified flight segment.
+    '''
     v_0, v_T = speeds
     distance = np.linalg.norm(start - end)
     # heading of source
@@ -73,10 +126,12 @@ def vector_t(start, end, speeds, fs=48000):
 
 
 def rectify(x):
+    '''Rectifies signal (negative segments mirrored into positive).'''
     return (np.abs(x) + x) / 2
 
 
 def load_mapping(name, mapping_file='mappings/mappings.json'):
+    '''Loads specification of loudspeaker position to required array format.'''
     with open(mapping_file, 'r') as file:
         mapping = json.load(file)[name]
         channel_numbers = [int(key) for key in mapping.keys()]
@@ -93,6 +148,7 @@ def load_mapping(name, mapping_file='mappings/mappings.json'):
 
 
 def sph_to_cart(sph_co_ords):
+    '''Converts between spherical and cartesian co-ordinate systems.'''
 
     # allow for lack of r value (i.e. for unit sphere)
     if sph_co_ords.shape[1] < 3:

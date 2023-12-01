@@ -22,6 +22,7 @@ flake8 = "^6.1.0"
 seaborn = "^0.13.0"
 coverage = "^7.3.2"
 pyloudnorm = "^0.1.1"
+pdoc = "^14.1.0"
 
 [build-system]
 requires = ["poetry-core"]

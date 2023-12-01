@@ -4,28 +4,52 @@ from . import interpolators, utils
 
 
 class UASEventRenderer():
+    '''
+    Main propagation model for rendering of drone flight events.
+
+    '''
     def __init__(
             self,
             flight_parameters,
             ground_material='grass',
-            fs=48000,
+            fs=48_000,
             receiver_height=1.5,
             loudspeaker_mapping='Octagon + Cube'):
-
+        '''
+        Initialises all necessary attributes for the UASEventRenderer object.
+        '''
         self.loudspeaker_mapping = loudspeaker_mapping
+        '''Layout of loudspeaker array for rendering'''
         self.fs = fs
+        '''Sampling frequency in Hz (default 48_000)'''
         self.receiver_height = receiver_height
+        '''Height of receiver position, metres (default 1.5)'''
         self.ground_material = ground_material
+        '''Material for ground reflection'''
         self.flight_parameters = flight_parameters
+        '''Segment-wise description of flight path'''
 
     def render(self, x):
+        '''
+        Renders output signal based on input parameters.
+
+        Parameters
+        ----------
+        `x`
+            Signal to use as UAS source. Assumed to be a stationary recording.
+
+        Returns
+        -------
+        `output`
+            Signal containing direct and reflected paths reaching receiver.
+        '''
         # apply each propagation path to input signal
         direct = self.direct_path.process(x)
         reflection = self.ground_reflection.process(x)
 
         # in samples
-        offset = (self.ground_reflection.init_delay
-                  - self.direct_path.init_delay)
+        offset = (self.ground_reflection._init_delay
+                  - self.direct_path._init_delay)
 
         # calculate whole and fractional number of samples to delay reflection
         whole_offset, frac_offset = utils.nearest_whole_fraction(offset)
@@ -38,9 +62,10 @@ class UASEventRenderer():
             reflection_zeros = np.zeros_like(reflection)
             reflection_zeros[:, whole_offset:] += reflection[:, :-whole_offset]
             reflection = reflection_zeros
-        self.d = direct.T
-        self.r = reflection.T
-        return direct.T + reflection.T
+        self._d = direct.T
+        self._r = reflection.T
+        output = direct.T + reflection.T
+        return output
 
     @property
     def receiver_height(self):
@@ -99,59 +124,74 @@ class UASEventRenderer():
             loudspeaker_mapping=self.loudspeaker_mapping
         )
 
-        self._norm_scaling = np.max(abs(self.direct_path.inv_sqr_attn))
-        self.direct_path.inv_sqr_attn /= self._norm_scaling
-        self.ground_reflection.inv_sqr_attn /= self._norm_scaling
+        self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
+        self.direct_path._inv_sqr_attn /= self._norm_scaling
+        self.ground_reflection._inv_sqr_attn /= self._norm_scaling
 
 
 class PropagationPath():
+    '''
+    Defines a single propagation path from source to receiver.
+
+    '''
     def __init__(
             self,
             flightpath,
             reflection_surface=None,
-            fs=48000,
-            c=343,
+            fs=48_000,
+            c=343.0,
             frame_len=512,
             loudspeaker_mapping='Octagon + Cube'
     ):
-
+        '''
+        Initialises PropagationPath object.
+        '''
         self.fs = fs
+        '''Sampling frequency in Hz (default `48_000`)'''
         self.reflection_surface = reflection_surface
+        '''String to select absorption coefficients for ground reflection.
+        Options `"grass"`, `"soil"`, `"asphalt"`.'''
         self.frame_len = frame_len
-        self.hop_len = frame_len // 2
+        '''Number of samples for frames used for time-varying atmospheric
+        absorption and ground reflection filtering (default `512`).'''
+        self._hop_len = frame_len // 2
 
         # load loudspeaker layout
+        self.loudspeaker_mapping = loudspeaker_mapping
+        '''String to select layout of loudspeaker array for rendering
+        (default `"Octagon + Cube"`).'''
         _, th, ph, r = utils.load_mapping(loudspeaker_mapping)
-        self.loudspeaker_locations = utils.sph_to_cart(np.array([th, ph, r]).T)
+        self._ls_locs = utils.sph_to_cart(np.array([th, ph, r]).T)
 
         # calculate amplitude envelopes for each loudspeaker
         self.flightpath = flightpath
-        self.amp_envs = self.calculate_amp_envs(self.loudspeaker_locations)
+        '''Array describing position of source at every sample point.'''
+        self._amp_envs = self._calculate_amp_envs(self._ls_locs)
 
         # calculate delays and amplitude curve
         _, _, r = utils.cart_to_sph(flightpath)
         delays = (r / c) * self.fs
-        self.init_delay = delays[0]
-        self.delta_delays = np.diff(delays)
-        self.inv_sqr_attn = 1 / r**2
+        self._init_delay = delays[0]
+        self._delta_delays = np.diff(delays)
+        self._inv_sqr_attn = 1 / r**2
 
         # calculate angles per frame for filters
-        self.sph_per_frame = utils.cart_to_sph(
+        self._sph_per_frame = utils.cart_to_sph(
             np.lib.stride_tricks.sliding_window_view(
-                flightpath, self.frame_len, 1)[:, ::self.hop_len].mean(2)
+                flightpath, self.frame_len, 1)[:, ::self._hop_len].mean(2)
         ).T
 
-    def calculate_amp_envs(self, loudspeaker_locs):
+    def _calculate_amp_envs(self, loudspeaker_locs):
         dbap = DBAP(loudspeaker_locs)
         fpath = np.copy(self.flightpath)
         # clip flightpath to (approximate) surface of array convex hull
         fpath = (fpath / np.linalg.norm(fpath, axis=0)) *\
-            np.mean(np.linalg.norm(dbap.ls_pos, axis=0))
+            np.mean(np.linalg.norm(dbap._ls_pos, axis=0))
         return dbap.gains(fpath.T)
 
-    def apply_doppler(self, x):
+    def _apply_doppler(self, x):
         # init output array and initial read position
-        out = np.zeros(len(self.delta_delays) + 1)
+        out = np.zeros(len(self._delta_delays) + 1)
         read_pointer = 0
 
         for i in range(len(out)):
@@ -161,19 +201,17 @@ class PropagationPath():
             out[i] = interpolators.interpolate(x, n, -s)
 
             # update read pointer position
-            read_pointer += (1 - self.delta_delays[i-1])
+            read_pointer += (1 - self._delta_delays[i-1])
 
         return out
 
-    def apply_amp_envs(self, x):
-        return x * self.inv_sqr_attn * self.amp_envs
+    def _apply_amp_envs(self, x):
+        return x * self._inv_sqr_attn * self._amp_envs
 
-    def filter(self, x):
-        '''Apply frequency-dependent atmospheric and ground absorption'''
-
+    def _filter(self, x):
         # neat trick to get windowed frames
         x_windowed = np.lib.stride_tricks.sliding_window_view(
-            x, self.frame_len)[::self.hop_len] * np.hanning(self.frame_len)
+            x, self.frame_len)[::self._hop_len] * np.hanning(self.frame_len)
 
         # list of filter stages
         filters = []
@@ -188,41 +226,71 @@ class PropagationPath():
         x_out = np.zeros(len(x))
 
         for i, (position, frame) in enumerate(
-                zip(self.sph_per_frame, x_windowed)):
+                zip(self._sph_per_frame, x_windowed)):
 
             for filter in filters:
                 frame = filter.filter(frame, position)
 
-            frame_index = i * self.hop_len
+            frame_index = i * self._hop_len
             x_out[frame_index:frame_index + self.frame_len] += frame
 
         return x_out
 
     def process(self, x):
-        if len(x) < len(self.delta_delays + 1):
+        '''
+        Processes input signal to add effects of propagation along single
+        specified path. Incorporates amplitude envelopes, doppler effect,
+        and filtering for atmospheric absorption and ground reflection.
+
+        Parameters
+        ----------
+        `x`
+            Signal to use as UAS source. Assumed to be a stationary recording.
+
+        Returns
+        -------
+        `output`
+            Array containing signal reaching receiver along specified path.
+        '''
+        if len(x) < len(self._delta_delays + 1):
             raise ValueError('Input signal shorter than path to be rendered')
 
-        return \
-            self.apply_amp_envs(
-                self.filter(
-                    self.apply_doppler(x)
+        output = \
+            self._apply_amp_envs(
+                    self._filter(
+                        self._apply_doppler(x)
+                    )
                 )
-            )
+        return output
 
 
 class GroundReflectionFilter():
+    '''
+    Implements material and incident angle-dependent lowpass filter
+    to simulate ground reflection.
+
+    '''
     def __init__(self,
                  material='asphalt',
                  freqs=np.geomspace(20, 24000),
                  Z_0=413.26,
-                 fs=48000,
+                 fs=48_000,
                  n_taps=21):
+        '''
+        Initialises GroundReflectionFilter.
+
+        '''
 
         self.freqs = freqs
+        '''array of frequencies used to evaluate frequency response'''
         self.Z_0 = Z_0
+        '''characteristic acoustic impedance of air [rayl/m^2]'''
         self.material = material
+        '''string to select absorption coefficients for ground reflection'''
         self.fs = fs
+        '''Sampling frequency in Hz'''
         self.n_taps = n_taps
+        '''Number of taps for FIR filter'''
 
     @property
     def material(self):
@@ -251,29 +319,57 @@ class GroundReflectionFilter():
         )
 
     def filter(self, x, position):
+        '''
+        Filters input signal based on angle-of-incidence on ground plane.
+
+        Parameters
+        ----------
+        `x`:
+            Frame of source signal.
+
+        `position`:
+            Array describing mean position of source during frame.
+
+        Returns
+        -------
+        `lowpass_sig`:
+            Filtered signal.
+        '''
         _, phi, _ = position
         phi = np.pi - phi
         h = signal.firls(self.n_taps, self.freqs,
                          utils.rectify(self._R(phi)),
                          fs=self.fs)
-        return signal.fftconvolve(x, h, 'same')
+        lowpass_sig = signal.fftconvolve(x, h, 'same')
+        return lowpass_sig
 
 
 class AtmosphericAbsorptionFilter():
+    '''
+    Implements distance-dependent lowpass filter to simulate
+    atmospheric absorption.
+    '''
     def __init__(self,
                  freqs=np.geomspace(20, 24000),
-                 temp=20,
-                 humidity=80,
+                 temp=20.0,
+                 humidity=80.0,
                  pressure=101.325,
                  n_taps=21,
-                 fs=48000):
+                 fs=48_000):
+        '''
+        Initialises GroundReflectionFilter.
 
-        self.attenuation = self.alpha(freqs, temp, humidity, pressure)
+        '''
+
+        self._attenuation = self._alpha(freqs, temp, humidity, pressure)
         self.n_taps = n_taps
+        '''Number of taps for FIR filter'''
         self.freqs = freqs
+        '''array of frequencies used to evaluate frequency response'''
         self.fs = fs
+        '''Sampling frequency [Hz]'''
 
-    def alpha(self, freqs, temp=20, humidity=80, pressure=101.325):
+    def _alpha(self, freqs, temp=20, humidity=80, pressure=101.325):
         '''Atmospheric absorption curves calculated as per ISO 9613-1'''
         # calculate temperatre variables
         kelvin = 273.15
@@ -313,39 +409,47 @@ class AtmosphericAbsorptionFilter():
     def filter(self, x, position):
         _, _, r = position
         h = signal.firls(self.n_taps, self.freqs,
-                         self.attenuation**r,
+                         self._attenuation**r,
                          fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
 
 
 class DBAP():
-    '''Calculate DBAP amplitude envelopes.
-    Based on https://github.com/PasqualeMainolfi/Pannix/'''
-    def __init__(self, loudspeaker_locs):
-        self.ls_pos = loudspeaker_locs.T
-        self.spat_blur = np.mean(np.linalg.norm(self.ls_pos, axis=0)) + 0.2
-        self.eta = self.spat_blur / len(self.ls_pos.T)
+    '''
+    Implements distance-based amplitude panning.
+    Based on https://github.com/PasqualeMainolfi/Pannix/
 
-    def loudspeaker_distance(self, pos_arr):
+    '''
+    def __init__(self, loudspeaker_locs):
+        '''
+        Initialises DBAP.
+        '''
+        self.loudspeaker_locs = loudspeaker_locs
+        '''Array defining cartesian locations of array loudspeakers.'''
+        self._ls_pos = self.loudspeaker_locs.T
+        self._spat_blur = np.mean(np.linalg.norm(self._ls_pos, axis=0)) + 0.2
+        self._eta = self._spat_blur / len(self._ls_pos.T)
+
+    def _loudspeaker_distance(self, pos_arr):
         return np.array(
             [
                 np.sqrt(
                     np.sum(
-                        (self.ls_pos.T - pos)**2, axis=1
-                    ) + self.spat_blur**2
+                        (self._ls_pos.T - pos)**2, axis=1
+                    ) + self._spat_blur**2
                 )
                 for pos in pos_arr
             ])
 
-    def b(self, d):
+    def _b(self, d):
         u = d.T - d.max(axis=1)
         u_norm = np.linalg.norm(u, axis=0)
         u = u/u_norm
-        u = u**2 + self.eta
+        u = u**2 + self._eta
         um = np.median(d, axis=1)
         return (2*u / um)**2 + 1
 
-    def k(self, b, d):
+    def _k(self, b, d):
         k_den = np.sqrt(
             np.sum(
                 (b**2).T /
@@ -355,7 +459,22 @@ class DBAP():
         return 1 / k_den
 
     def gains(self, pos_arr):
-        d = self.loudspeaker_distance(pos_arr)
-        b = self.b(d)
-        k = self.k(b, d)
-        return (k * b) / d.T
+        '''
+        Calculates gains applicable to each loudspeaker for input array of
+        source positions.
+
+        Parameters
+        ----------
+        `pos_arr`
+            Array describing position of source at each sample time.
+
+        Returns
+        -------
+        `gains`
+            Array of gains for specified loudspeaker layout.
+        '''
+        d = self._loudspeaker_distance(pos_arr)
+        b = self._b(d)
+        k = self._k(b, d)
+        gains = (k * b) / d.T
+        return gains
