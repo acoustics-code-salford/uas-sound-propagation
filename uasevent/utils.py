@@ -6,13 +6,19 @@ def test_sine(t, f_0=440, A=0.75, fs=48_000):
     '''
     Generate a sine wave signal of length t.
 
-        Parameters:
-            t (float): Length of sine signal in seconds
-            f_0 (float): Frequency [Hz] (default 440)
-            A (float): Amplitude (default 0.75)
-            fs (int): Sampling frequency [Hz] (default 48_000)
-        Returns:
-            sig (np.ndarray): Array containing sinusoidal signal.
+    Parameters:
+    -----------
+    `t`: Length of sine signal in seconds
+
+    `f_0`: Frequency [Hz] (default 440)
+
+    `A`: Amplitude (default 0.75)
+
+    `fs`: Sampling frequency [Hz] (default 48_000)
+
+    Returns
+    -------
+    `sig`: Array containing sinusoidal signal.
     '''
     t_samples = np.linspace(0, t, fs*t)
     sig = np.zeros_like(t_samples)
@@ -50,28 +56,50 @@ def nearest_whole_fraction(pos):
 
 
 def cart_to_sph(xyz, return_r=True):
-    '''Transform between cartesian and polar co-ordinates.'''
+    '''
+    Transform between cartesian and polar co-ordinates.
+
+    Parameters
+    ----------
+    `xyz`: Array of cartesian co-ordinates.
+
+    `return_r`: Bool toggling output of radius. If `False`, only azimuth and
+    elevation will be output.
+
+    Returns
+    -------
+    `sph_coords`: Array of spherical co-ordinates.
+    '''
     r = np.linalg.norm(xyz, axis=0)
     x, y, z = xyz
 
     theta = np.arctan2(y, x) % (2 * np.pi)
     phi = np.arccos(z / r)
 
-    return np.array([theta, phi, r]) if return_r else np.array([theta, phi])
+    sph_coords = np.array([theta, phi, r]) \
+        if return_r else np.array([theta, phi])
+
+    return sph_coords
 
 
 def vector_t(start, end, speeds, fs=48_000):
     '''
     Calculate source position at each sample time along specified trajectory.
 
-        Parameters:
-            start (array): Cartesian co-ordinates of starting position.
-            end (array): Cartesian co-ordinates of ending position.
-            speeds (array): Start and end speeds of specified flight segment.
-            fs (int): Sampling frequency [Hz] (default 48_000)
-        Returns:
-            xyz (np.ndarray): vector describing position of source at each
-            sample time based on the specified flight segment
+    Parameters
+    ----------
+    `start`: Cartesian co-ordinates of starting position.
+
+    `end`: Cartesian co-ordinates of ending position.
+
+    `speeds`: Start and end speeds of specified flight segment.
+
+    `fs`: Sampling frequency [Hz] (default 48_000)
+
+    Returns
+    -------
+    `xyz`: Array describing position of source at each sample time based on
+    the specified flight segment.
     '''
     v_0, v_T = speeds
     distance = np.linalg.norm(start - end)

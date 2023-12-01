@@ -4,7 +4,7 @@ import numpy as np
 import soundfile as sf
 import uasevent.utils as utils
 import uasevent.interpolators as interpolators
-from uasevent.environment_model import UASEventRenderer
+from uasevent.environment import UASEventRenderer
 from numpy.testing import assert_array_almost_equal
 
 
@@ -117,8 +117,8 @@ class TestRender(unittest.TestCase):
 
         # first n samples of reflected signal should be zero
         n = int(np.floor(
-            self.renderer.ground_reflection.init_delay
-            - self.renderer.direct_path.init_delay
+            self.renderer.ground_reflection._init_delay
+            - self.renderer.direct_path._init_delay
         ))
         self.assertTrue((self.renderer._r[:n] == 0).all())
 

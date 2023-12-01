@@ -4,21 +4,13 @@ import abc
 
 
 class FractionalInterpolator():
-    '''
-    Defines framework for fractional delay interpolators.
-
-    ...
-
-    Attributes
-    ----------
-    x : np.ndarray
-        signal on which to apply the fractional delay
-    delta : float
-        fraction of a sample by which to delay input signal
-    '''
+    '''Defines framework for fractional delay interpolators.'''
     def __init__(self, x, delta):
+        '''Initialises interpolator object.'''
         self.delta = delta
+        '''Fraction of a sample by which to delay input signal.'''
         self.x = x
+        '''Signal on which to apply the fractional delay.'''
 
     @property
     def x(self):
@@ -38,18 +30,7 @@ class FractionalInterpolator():
 
 
 class LinearInterpolator(FractionalInterpolator):
-    '''
-    Linear interpolation method for fractional delay.
-
-    ...
-
-    Attributes
-    ----------
-    x : np.ndarray
-        signal on which to apply the fractional delay
-    delta : float
-        fraction of a sample by which to delay input signal
-    '''
+    '''Linear interpolation method for fractional delay.'''
     def _calc_delayed(self, x):
         # roll input for x + 1
         x_rolled = np.roll(x, 1)
@@ -61,18 +42,7 @@ class LinearInterpolator(FractionalInterpolator):
 
 
 class AllpassInterpolator(FractionalInterpolator):
-    '''
-    Allpass filter method for fractional delay.
-
-    ...
-
-    Attributes
-    ----------
-    x : np.ndarray
-        signal on which to apply the fractional delay
-    delta : float
-        fraction of a sample by which to delay input signal
-    '''
+    '''Allpass filter method for fractional delay.'''
     @property
     def delta(self):
         return self._delta
@@ -95,24 +65,14 @@ class AllpassInterpolator(FractionalInterpolator):
 
 
 class SincInterpolator(FractionalInterpolator):
-    '''
-    Sinc interpolation method for fractional delay.
-
-    ...
-
-    Attributes
-    ----------
-    x : np.ndarray
-        signal on which to apply the fractional delay
-    delta : float
-        fraction of a sample by which to delay input signal
-    '''
+    '''Sinc interpolation method for fractional delay.'''
     def __init__(self, x, delta, N=35):
         self.N = N
-        self.h = self.sinc_filter(N, delta)
+        '''Number of taps for sinc FIR filter.'''
+        self._h = self._sinc_filter(N, delta)
         super().__init__(x, delta)
 
-    def sinc_filter(self, N, delta):
+    def _sinc_filter(self, N, delta):
         n = np.arange(N)
         # calculate sinc
         h = np.sinc(n - ((N - 1) / 2) - delta)
@@ -125,7 +85,7 @@ class SincInterpolator(FractionalInterpolator):
     def _calc_delayed(self, x):
         if x.ndim == 1:
             x = np.expand_dims(x, 1)
-        y = sig.fftconvolve(x, self.h, 'same')
+        y = sig.fftconvolve(x, self._h, 'same')
         return np.squeeze(y)
 
 
@@ -138,19 +98,17 @@ def interpolate(
     '''
     Helper function returning a single interpolated sample of an input signal.
 
-        Parameters:
-            x (np.ndarray): signal on which to apply the fractional delay
-            n (int): whole number index to sample
-            s (float): fraction by which to interpolate between samples
-        Returns:
-            value (float): value of interpolated sample
-
-    Attributes
+    Parameters
     ----------
-    x : np.ndarray
-        signal on which to apply the fractional delay
-    delta : float
-        fraction of a sample by which to delay input signal
+    `x`: signal on which to apply the fractional delay
+
+    `n`: whole number index to sample
+
+    `s`: fraction by which to interpolate between samples
+
+    Returns
+    -------
+    `value`: value of interpolated sample
     '''
     interp_win = np.arange(n-interp_win_len//2, n+interp_win_len//2)
     x_frame = x[interp_win]
