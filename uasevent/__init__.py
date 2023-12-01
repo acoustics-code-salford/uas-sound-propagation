@@ -24,11 +24,13 @@ assuming free-field propagation and account for the following effects:
 
 **Copyright statement**: This file and code is part of work undertaken within
 the REFMAP project (www.refmap.eu), and is subject to license as detailed
-in the [code repository](https://github.com/acoustics-code-salford/uas-sound-event).
+in the [code repository
+](https://github.com/acoustics-code-salford/uas-sound-event).
 
-Based on method detailed in: [Heutschi, K., Ott, B., Nussbaumer, T., and Wellig, P., 
-"Synthesis of real world drone signals based on lab recordings,"
-Acta Acustica, Vol. 4, No. 6, 2020, p. 24.](https://doi.org/10.1051/aacus/2020023)
+Based on method detailed in: [Heutschi, K., Ott, B., Nussbaumer, T., and
+Wellig, P., "Synthesis of real world drone signals based on lab recordings,"
+Acta Acustica, Vol. 4, No. 6, 2020, p. 24.
+](https://doi.org/10.1051/aacus/2020023)
 
 Usage
 -----
@@ -49,16 +51,16 @@ flyby back, 10 180 30, 10 -200 30, 30 30
 Using these CSV flightpath definitions, `UASEventRenderer` calculates the
 position of the source at every sample time. These positions are used to
 calculate the delays, distances, and angles required to render the propagation
-effects based on a listener located at the origin of the co-ordinate system. 
+effects based on a listener located at the origin of the co-ordinate system.
 
-The listener height is set to 1.5 m by default. This affects the calculation 
+The listener height is set to 1.5 m by default. This affects the calculation
 of the ground reflection signal in particular. Additional parameters include
 the ground material, which can be selected from `'grass'`, `'soil'`, or
-`'asphalt'`, and the loudspeaker layout to target with the DBAP panning 
+`'asphalt'`, and the loudspeaker layout to target with the DBAP panning
 (currently only `'Octagon + Cube'` is implemented).
 
-The object's `render()` method can then be used to generate a time-series 
-signal at the receiver point. The input source used should be sufficient in 
+The object's `render()` method can then be used to generate a time-series
+signal at the receiver point. The input source used should be sufficient in
 length to cover the time taken to cover the entire defined flightpath.
 
 The following is a basic script for rendering an event:
