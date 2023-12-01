@@ -162,7 +162,7 @@ class PropagationPath():
     c : float
         speed of sound [m/s] (default 343.0)
     frame_len : int
-        length of frames used for time-varying atmospheric absorption and 
+        length of frames used for time-varying atmospheric absorption and
         ground reflection filtering (default 512)
     loudspeaker_mapping : string
         string to select layout of loudspeaker array for rendering
@@ -192,7 +192,7 @@ class PropagationPath():
         c : float
             speed of sound [m/s] (default 343.0)
         frame_len : int
-            length of frames used for time-varying atmospheric absorption and 
+            length of frames used for time-varying atmospheric absorption and
             ground reflection filtering (default 512)
         loudspeaker_mapping : string
             string to select layout of loudspeaker array for rendering
@@ -281,7 +281,7 @@ class PropagationPath():
 
     def process(self, x):
         '''
-        Processes input signal to add effects of propagation along single 
+        Processes input signal to add effects of propagation along single
         specified path. Incorporates amplitude envelopes, doppler effect,
         and filtering for atmospheric absorption and ground reflection.
 
@@ -306,9 +306,10 @@ class PropagationPath():
                 )
         return output
 
+
 class GroundReflectionFilter():
     '''
-    Implements material and incident angle-dependent lowpass filter 
+    Implements material and incident angle-dependent lowpass filter
     to simulate ground reflection.
     ...
 

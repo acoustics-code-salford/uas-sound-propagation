@@ -102,7 +102,7 @@ class TestRender(unittest.TestCase):
         params = utils.load_params('tests/test_flight.csv')
         self.renderer = UASEventRenderer(params, 'asphalt', fs, 1.5)
         self.xout = self.renderer.render(self.x)
-        self.dir_x = self.renderer.d
+        self.dir_x = self.renderer._d
 
         params_2 = utils.load_params('tests/test_flight_2.csv')
         self.renderer_2 = UASEventRenderer(params_2, 'asphalt', fs, 1.5)
@@ -112,15 +112,15 @@ class TestRender(unittest.TestCase):
         self.assertEqual(len(self.renderer._flightpath.T), len(self.xout))
 
         # direct path should have higher power than reflection
-        self.assertGreater(np.sum(abs(self.renderer.d)),
-                           np.sum(abs(self.renderer.r)))
+        self.assertGreater(np.sum(abs(self.renderer._d)),
+                           np.sum(abs(self.renderer._r)))
 
         # first n samples of reflected signal should be zero
         n = int(np.floor(
             self.renderer.ground_reflection.init_delay
             - self.renderer.direct_path.init_delay
         ))
-        self.assertTrue((self.renderer.r[:n] == 0).all())
+        self.assertTrue((self.renderer._r[:n] == 0).all())
 
         # rendering of greater distance should have larger scaling
         self.assertGreater(1/self.renderer_2._norm_scaling,

@@ -3,7 +3,7 @@ Acoustic propagation model for auralising UAS sources in motion
 ===============================================================
 
 uasevent is a Python programme simulating simple atmospheric acoustic
-propagation effects for creating multichannel auralisations of 
+propagation effects for creating multichannel auralisations of
 unmanned aerial systems (UAS - drones), or other airborne sources,
 in motion.
 
@@ -26,8 +26,8 @@ in the code repository.
 https://github.com/acoustics-code-salford/uas-sound-event
 
 Based on method detailed in:
-Heutschi, K., Ott, B., Nussbaumer, T., and Wellig, P., 
+Heutschi, K., Ott, B., Nussbaumer, T., and Wellig, P.,
 "Synthesis of real world drone signals based on lab recordings,"
-Acta Acustica, Vol. 4, No. 6, 2020, p. 24. 
+Acta Acustica, Vol. 4, No. 6, 2020, p. 24.
 https://doi.org/10.1051/aacus/2020023
 '''

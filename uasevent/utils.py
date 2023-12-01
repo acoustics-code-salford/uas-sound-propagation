@@ -5,7 +5,7 @@ import numpy as np
 def test_sine(t, f_0=440, A=0.75, fs=48_000):
     '''
     Generate a sine wave signal of length t.
-    
+
         Parameters:
             t (float): Length of sine signal in seconds
             f_0 (float): Frequency [Hz] (default 440)
@@ -63,14 +63,14 @@ def cart_to_sph(xyz, return_r=True):
 def vector_t(start, end, speeds, fs=48_000):
     '''
     Calculate source position at each sample time along specified trajectory.
-    
+
         Parameters:
             start (array): Cartesian co-ordinates of starting position.
             end (array): Cartesian co-ordinates of ending position.
             speeds (array): Start and end speeds of specified flight segment.
             fs (int): Sampling frequency [Hz] (default 48_000)
         Returns:
-            xyz (np.ndarray): vector describing position of source at each 
+            xyz (np.ndarray): vector describing position of source at each
             sample time based on the specified flight segment
     '''
     v_0, v_T = speeds
