@@ -93,5 +93,13 @@
             "elevation": "90",
             "distance": "1.0"
         }
+    },
+
+    "Mono": {
+        "0": {
+            "azimuth": "0",
+            "elevation": "90",
+            "distance": "1.0"
+        }
     }
 }

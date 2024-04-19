@@ -53,10 +53,16 @@ class UASEventRenderer():
 
         # calculate whole and fractional number of samples to delay reflection
         whole_offset, frac_offset = utils.nearest_whole_fraction(offset)
+
         # calculate fractional delay of reflection)
         reflection = np.array([
             i for i in interpolators.SincInterpolator(reflection, frac_offset)
         ])
+
+        # add back channel dimension if mono output
+        if direct.shape[0] == 1:
+            reflection = np.expand_dims(reflection, 0)
+
         # add zeros to start of reflection to account for whole sample delay
         if whole_offset:
             reflection_zeros = np.zeros_like(reflection)
