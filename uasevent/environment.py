@@ -443,8 +443,6 @@ class DBAP():
 
     def _b(self, d):
         u = d.T - d.max(axis=1)
-        u_norm = np.linalg.norm(u, axis=0)
-        u = u/u_norm
         u = u**2 + self._eta
         um = np.median(d, axis=1)
         return (2*u / um)**2 + 1

@@ -80,5 +80,18 @@
             "elevation": "51",
             "distance": "1.54"
         }
+    },
+
+    "Stereo": {
+        "0": {
+            "azimuth": "45",
+            "elevation": "90",
+            "distance": "1.0"
+        },
+        "1": {
+            "azimuth": "315",
+            "elevation": "90",
+            "distance": "1.0"
+        }
     }
 }
