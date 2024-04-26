@@ -11,6 +11,7 @@ resampy = "^0.4.2"
 numpy = "^1.18.0"
 soundfile = "^0.12.1"
 scipy = "^1.11.3"
+pyqt6 = "^6.7.0"
 
 [tool.poetry.group.dev.dependencies]
 matplotlib = "^3.8.0"
