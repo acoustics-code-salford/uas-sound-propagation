@@ -2,7 +2,7 @@ import sys
 import json
 
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QAction
+from PyQt6.QtGui import QAction, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
     QApplication, 
@@ -29,6 +29,8 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle('UAV Sound Propagation')
         layout = QGridLayout()
+
+        # toolbar
         toolbar = QToolBar('Main Toolbar')
         self.addToolBar(toolbar)
         file_action = QAction('File', self)
@@ -38,10 +40,13 @@ class MainWindow(QMainWindow):
         toolbar.addAction(edit_action)
         toolbar.addAction(view_action)
 
-        filepath_label = QLabel('testscr.wav')
-        srclen_label = QLabel('19.0 s')
-        pathlen_label = QLabel('19.0 s')
-        # layout.addWidget(filepath_label, 4, 0)
+        flightpath_image = QLabel()
+        pic = QPixmap('flightpath.png')
+        pic = pic.scaledToWidth(300)
+        flightpath_image.setPixmap(pic)
+        # flightpath_image.resize(90, 90)
+        layout.addWidget(flightpath_image, 0, 1)
+
 
         # receiver height
         self.receiver_height_box = QLineEdit('1.5')
@@ -62,6 +67,11 @@ class MainWindow(QMainWindow):
         self.mapping_dropdown = QComboBox()
         self.mapping_dropdown.addItems(mapping_names)
 
+        # labels
+        filepath_label = QLabel('testscr.wav (19.0 s)')
+        pathlen_label = QLabel('19.0 s')
+
+        # form
         form = QFormLayout()
         form.addRow('Receiver Height [metres]', self.receiver_height_box)
         form.addRow('Direct Path', self.direct_checkbox)
@@ -70,19 +80,23 @@ class MainWindow(QMainWindow):
         form.addRow('Ground Material', self.material_dropdown)
         form.addRow('Loudspeaker Mapping', self.mapping_dropdown)
         form.addRow('Source File:', filepath_label)
+        form.addRow('Path Length:', pathlen_label)
         layout.addLayout(form, 0, 0, 1, 1)
 
         # flightpath table
         self.setup_flightpath_table()
-        layout.addWidget(self.flightpath_table, 2, 0, 1, 2)
+        layout.addWidget(self.flightpath_table, 1, 0, 1, 2)
 
         # table control buttons
         self.add_button = QPushButton('+')
         self.add_button.setMaximumWidth(30)
-        layout.addWidget(self.add_button, 3, 0)
+        layout.addWidget(self.add_button, 2, 0)
         self.remove_button = QPushButton('-')
         self.remove_button.setMaximumWidth(30)
-        layout.addWidget(self.remove_button, 3, 1)
+        layout.addWidget(self.remove_button, 2, 1)
+
+        self.render_button = QPushButton('Render')
+        layout.addWidget(self.render_button, 3, 0, 1, 2)
         
         # set up main display
         widget = QWidget()
