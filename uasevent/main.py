@@ -3,6 +3,7 @@ import json
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QApplication, 
     QComboBox,
     QFormLayout,
@@ -12,8 +13,7 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QMainWindow,
-    QAbstractScrollArea,
-    QHeaderView
+    QLineEdit
 )
 
 from pathlib import Path
@@ -25,25 +25,46 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
 
         self.setWindowTitle('UAV Sound Propagation')
-        self.setFixedSize(QSize(700, 600))
+        # self.setFixedSize(QSize(650, 600))
         layout = QGridLayout()
 
+        # receiver height
+        self.receiver_height_box = QLineEdit('1.5')
+        self.receiver_height_box.setFixedWidth(35)
+
+        # feature check boxes
+        self.direct_checkbox = QCheckBox()
+        self.reflection_checkbox = QCheckBox()
+        self.atmos_checkbox = QCheckBox()
+
+        # ground material dropdown
+        materials = ['Grass', 'Soil', 'Asphalt']
+        self.material_dropdown = QComboBox()
+        self.material_dropdown.addItems(materials)
+
+        # loudspeaker mapping dropdown
         mapping_names = list(json.load(open('mappings/mappings.json')).keys())
         self.mapping_dropdown = QComboBox()
         self.mapping_dropdown.addItems(mapping_names)
+
         form = QFormLayout()
-        form.addRow('Loudspeaker Mapping:', self.mapping_dropdown)
+        form.addRow('Receiver Height [metres]', self.receiver_height_box)
+        form.addRow('Direct Path', self.direct_checkbox)
+        form.addRow('Ground Reflection', self.reflection_checkbox)
+        form.addRow('Atmospheric Absorption', self.atmos_checkbox)
+        form.addRow('Ground Material', self.material_dropdown)
+        form.addRow('Loudspeaker Mapping', self.mapping_dropdown)
         layout.addLayout(form, 0, 0, 1, 2)
 
+        # flightpath table
         self.setup_flighpath_table()
-        layout.addWidget(self.flightpath_table, 1, 0, 1, 2, 
-                         Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.flightpath_table, 2, 0, 1, 2)
 
+        # table control buttons
         self.add_button = QPushButton('Add Stage')
-        layout.addWidget(self.add_button, 2, 0)
-
+        layout.addWidget(self.add_button, 3, 0)
         self.remove_button = QPushButton('Remove Stage')
-        layout.addWidget(self.remove_button, 2, 1)
+        layout.addWidget(self.remove_button, 3, 1)
         
         # set up main display
         widget = QWidget()
