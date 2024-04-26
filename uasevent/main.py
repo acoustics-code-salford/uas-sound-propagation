@@ -2,6 +2,7 @@ import sys
 import json
 
 from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import (
     QCheckBox,
     QApplication, 
@@ -13,7 +14,9 @@ from PyQt6.QtWidgets import (
     QTableWidget,
     QTableWidgetItem,
     QMainWindow,
-    QLineEdit
+    QLineEdit,
+    QToolBar,
+    QLabel
 )
 
 from pathlib import Path
@@ -25,8 +28,20 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
 
         self.setWindowTitle('UAV Sound Propagation')
-        # self.setFixedSize(QSize(650, 600))
         layout = QGridLayout()
+        toolbar = QToolBar('Main Toolbar')
+        self.addToolBar(toolbar)
+        file_action = QAction('File', self)
+        edit_action = QAction('Edit', self)
+        view_action = QAction('View', self)
+        toolbar.addAction(file_action)
+        toolbar.addAction(edit_action)
+        toolbar.addAction(view_action)
+
+        filepath_label = QLabel('testscr.wav')
+        srclen_label = QLabel('19.0 s')
+        pathlen_label = QLabel('19.0 s')
+        # layout.addWidget(filepath_label, 4, 0)
 
         # receiver height
         self.receiver_height_box = QLineEdit('1.5')
@@ -54,16 +69,19 @@ class MainWindow(QMainWindow):
         form.addRow('Atmospheric Absorption', self.atmos_checkbox)
         form.addRow('Ground Material', self.material_dropdown)
         form.addRow('Loudspeaker Mapping', self.mapping_dropdown)
-        layout.addLayout(form, 0, 0, 1, 2)
+        form.addRow('Source File:', filepath_label)
+        layout.addLayout(form, 0, 0, 1, 1)
 
         # flightpath table
-        self.setup_flighpath_table()
+        self.setup_flightpath_table()
         layout.addWidget(self.flightpath_table, 2, 0, 1, 2)
 
         # table control buttons
-        self.add_button = QPushButton('Add Stage')
+        self.add_button = QPushButton('+')
+        self.add_button.setMaximumWidth(30)
         layout.addWidget(self.add_button, 3, 0)
-        self.remove_button = QPushButton('Remove Stage')
+        self.remove_button = QPushButton('-')
+        self.remove_button.setMaximumWidth(30)
         layout.addWidget(self.remove_button, 3, 1)
         
         # set up main display
@@ -71,7 +89,13 @@ class MainWindow(QMainWindow):
         widget.setLayout(layout)
         self.setCentralWidget(widget)
 
-    def setup_flighpath_table(self):
+        menu = self.menuBar()
+        new_action = QAction('&New', self)
+        file_menu = menu.addMenu('&File')
+        file_menu.addAction(new_action)
+
+
+    def setup_flightpath_table(self):
         self.flightpath_table = QTableWidget()
         self.flightpath_table.setColumnCount(8)
         self.flightpath_table.setRowCount(1)
