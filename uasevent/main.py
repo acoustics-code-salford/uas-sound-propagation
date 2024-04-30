@@ -1,5 +1,8 @@
+import os
 import sys
 import json
+
+from utils import load_params
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QAction, QPixmap
@@ -16,7 +19,8 @@ from PyQt6.QtWidgets import (
     QMainWindow,
     QLineEdit,
     QToolBar,
-    QLabel
+    QLabel,
+    QFileDialog
 )
 
 from pathlib import Path
@@ -31,14 +35,14 @@ class MainWindow(QMainWindow):
         layout = QGridLayout()
 
         # toolbar
-        toolbar = QToolBar('Main Toolbar')
-        self.addToolBar(toolbar)
-        file_action = QAction('File', self)
-        edit_action = QAction('Edit', self)
-        view_action = QAction('View', self)
-        toolbar.addAction(file_action)
-        toolbar.addAction(edit_action)
-        toolbar.addAction(view_action)
+        # toolbar = QToolBar('Main Toolbar')
+        # self.addToolBar(toolbar)
+        # file_action = QAction('File', self)
+        # edit_action = QAction('Edit', self)
+        # view_action = QAction('View', self)
+        # toolbar.addAction(file_action)
+        # toolbar.addAction(edit_action)
+        # toolbar.addAction(view_action)
 
         flightpath_image = QLabel()
         pic = QPixmap('flightpath.png')
@@ -105,9 +109,28 @@ class MainWindow(QMainWindow):
 
         menu = self.menuBar()
         new_action = QAction('&New', self)
+        open_action = QAction('&Open Flightpath', self)
         file_menu = menu.addMenu('&File')
         file_menu.addAction(new_action)
+        file_menu.addAction(open_action)
+        open_action.triggered.connect(self.open_flightpath)
 
+    def open_flightpath(self, _):
+        # set up dialog box
+        dialog = QFileDialog()
+        # allow single file only
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        # set accepted formats
+        dialog.setNameFilter('(*.csv)')
+        dialog.exec()
+        filepath = dialog.selectedFiles()
+
+        if not filepath:
+            return False
+        filepath = filepath[0]
+
+        flightpath = load_params(filepath)
+        print(flightpath)
 
     def setup_flightpath_table(self):
         self.flightpath_table = QTableWidget()
@@ -128,8 +151,13 @@ class MainWindow(QMainWindow):
         init_flightpath = [
             '20', '-142.5', '10', '20', '142.5', '10', '15', '15'
         ]
+        # maybe get it to load a default flightpath?
+        self.set_flightpath_table_vals(init_flightpath)
+        self.flightpath_table.setFixedSize(QSize(616, 100))
+
+    def set_flightpath_table_vals(self, vals):
         for col, val in zip(
-            range(self.flightpath_table.columnCount()), init_flightpath):
+            range(self.flightpath_table.columnCount()), vals):
 
             item = QTableWidgetItem(val)
             item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -137,7 +165,6 @@ class MainWindow(QMainWindow):
             self.flightpath_table.setColumnWidth(col, 75)
             self.flightpath_table.setItem(0, col, item)
 
-        self.flightpath_table.setFixedSize(QSize(616, 100))
 
 
 if __name__ == "__main__":
