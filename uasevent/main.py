@@ -129,8 +129,13 @@ class MainWindow(QMainWindow):
             return False
         filepath = filepath[0]
 
-        flightpath = load_params(filepath)
-        print(flightpath)
+        params = load_params(filepath)
+        # pathvals = []
+        # for stage in params: # one line in table per stage
+        #     for section in stage:
+        #         for val in section:
+        #             pathvals.append(val)
+        self.set_flightpath_table_vals(params)
 
     def setup_flightpath_table(self):
         self.flightpath_table = QTableWidget()
@@ -148,23 +153,37 @@ class MainWindow(QMainWindow):
         ])
         
         # crudely set values and column widths
-        init_flightpath = [
-            '20', '-142.5', '10', '20', '142.5', '10', '15', '15'
-        ]
+        # init_flightpath = [
+        #     '20', '-142.5', '10', '20', '142.5', '10', '15', '15'
+        # ]
         # maybe get it to load a default flightpath?
-        self.set_flightpath_table_vals(init_flightpath)
-        self.flightpath_table.setFixedSize(QSize(616, 100))
-
-    def set_flightpath_table_vals(self, vals):
-        for col, val in zip(
-            range(self.flightpath_table.columnCount()), vals):
-
-            item = QTableWidgetItem(val)
-            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-
+        # self.set_flightpath_table_vals(init_flightpath)
+        for col in range(self.flightpath_table.columnCount()):
             self.flightpath_table.setColumnWidth(col, 75)
-            self.flightpath_table.setItem(0, col, item)
+        self.flightpath_table.setFixedSize(QSize(610, 200))
 
+    def set_flightpath_table_vals(self, params):
+        
+        # set table to correct number of rows
+        n_rows = len(params)
+        for i in range(n_rows - self.flightpath_table.rowCount()):
+            self.flightpath_table.insertRow(i)
+        for i in range(self.flightpath_table.rowCount() - n_rows):
+            self.flightpath_table.removeRow(0)
+
+        for row, stage in enumerate(params):
+            pathvals = []
+            for section in stage:
+                for val in section:
+                    # flatten nested lists
+                    pathvals.append(val)
+            for col, val, in zip(
+                range(self.flightpath_table.columnCount()), pathvals):
+                item = QTableWidgetItem(str(val))
+                self.flightpath_table.setItem(row, col, item)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                print(row, col, val)
+                
 
 
 if __name__ == "__main__":
