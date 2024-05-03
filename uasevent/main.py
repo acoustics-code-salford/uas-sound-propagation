@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import numpy as np
 
 from utils import load_params
 
@@ -34,23 +35,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('UAV Sound Propagation')
         layout = QGridLayout()
 
-        # toolbar
-        # toolbar = QToolBar('Main Toolbar')
-        # self.addToolBar(toolbar)
-        # file_action = QAction('File', self)
-        # edit_action = QAction('Edit', self)
-        # view_action = QAction('View', self)
-        # toolbar.addAction(file_action)
-        # toolbar.addAction(edit_action)
-        # toolbar.addAction(view_action)
-
         flightpath_image = QLabel()
         pic = QPixmap('flightpath.png')
         pic = pic.scaledToWidth(300)
         flightpath_image.setPixmap(pic)
         # flightpath_image.resize(90, 90)
         layout.addWidget(flightpath_image, 0, 1)
-
 
         # receiver height
         self.receiver_height_box = QLineEdit('1.5')
@@ -129,37 +119,30 @@ class MainWindow(QMainWindow):
             return False
         filepath = filepath[0]
 
-        params = load_params(filepath)
-        # pathvals = []
-        # for stage in params: # one line in table per stage
-        #     for section in stage:
-        #         for val in section:
-        #             pathvals.append(val)
+        params = np.loadtxt(
+            filepath,
+            delimiter=',',
+            skiprows=1,
+            usecols=np.arange(0, 4),
+            dtype='str'
+        ).reshape(-1, 4)
+        #load_params(filepath)
         self.set_flightpath_table_vals(params)
 
     def setup_flightpath_table(self):
         self.flightpath_table = QTableWidget()
-        self.flightpath_table.setColumnCount(8)
+        self.flightpath_table.setColumnCount(4)
         self.flightpath_table.setRowCount(1)
+
         self.flightpath_table.setHorizontalHeaderLabels([
-            'Start X', 
-            'Start Y', 
-            'Start Z',
-            'End X',
-            'End Y',
-            'End Z',
-            'Start Speed',
-            'End Speed'
+            'Label',
+            'Start [xyz]', 
+            'End [xyz]',
+            'Speeds [m/s]',
         ])
         
-        # crudely set values and column widths
-        # init_flightpath = [
-        #     '20', '-142.5', '10', '20', '142.5', '10', '15', '15'
-        # ]
-        # maybe get it to load a default flightpath?
-        # self.set_flightpath_table_vals(init_flightpath)
         for col in range(self.flightpath_table.columnCount()):
-            self.flightpath_table.setColumnWidth(col, 75)
+            self.flightpath_table.setColumnWidth(col, 148)
         self.flightpath_table.setFixedSize(QSize(610, 200))
 
     def set_flightpath_table_vals(self, params):
@@ -172,19 +155,12 @@ class MainWindow(QMainWindow):
             self.flightpath_table.removeRow(0)
 
         for row, stage in enumerate(params):
-            pathvals = []
-            for section in stage:
-                for val in section:
-                    # flatten nested lists
-                    pathvals.append(val)
-            for col, val, in zip(
-                range(self.flightpath_table.columnCount()), pathvals):
-                item = QTableWidgetItem(str(val))
+            for col, section, in zip(
+                range(self.flightpath_table.columnCount()), stage):
+                item = QTableWidgetItem(str(section))
                 self.flightpath_table.setItem(row, col, item)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                print(row, col, val)
                 
-
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
