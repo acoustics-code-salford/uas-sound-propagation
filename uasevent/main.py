@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import numpy as np
+import soundfile as sf
 
 from utils import load_params
 
@@ -56,6 +57,9 @@ class MainWindow(QMainWindow):
         self.direct_checkbox = QCheckBox()
         self.reflection_checkbox = QCheckBox()
         self.atmos_checkbox = QCheckBox()
+        self.direct_checkbox.checkStateChanged.connect(self.direct_check)
+        self.reflection_checkbox.checkStateChanged.connect(self.reflect_check)
+        self.atmos_checkbox.checkStateChanged.connect(self.atmos_check)
 
         self.direct_checkbox.setChecked(True)
         self.reflection_checkbox.setChecked(True)
@@ -77,6 +81,7 @@ class MainWindow(QMainWindow):
 
         # labels
         self.filepath_label = QLabel('')
+        self.sourcelen_label = QLabel('')
         self.pathlen_label = QLabel('')
 
         # form
@@ -88,10 +93,12 @@ class MainWindow(QMainWindow):
         form.addRow('Ground Material', self.material_dropdown)
         form.addRow('Loudspeaker Mapping', self.mapping_dropdown)
         form.addRow('Source File:', self.filepath_label)
+        form.addRow('Source Length:', self.sourcelen_label)
         form.addRow('Path Length:', self.pathlen_label)
         layout.addLayout(form, 0, 0, 1, 1)
 
         # flightpath table
+        # TODO: set what happens when values manually changed
         self.setup_flightpath_table()
         layout.addWidget(self.flightpath_table, 1, 0, 1, 2)
 
@@ -113,11 +120,53 @@ class MainWindow(QMainWindow):
 
         menu = self.menuBar()
         new_action = QAction('&New', self)
-        open_action = QAction('&Open Flightpath', self)
+        open_flightpath_action = QAction('&Open Flightpath', self)
+        open_source_action = QAction('&Open Source Audio', self)
         file_menu = menu.addMenu('&File')
         file_menu.addAction(new_action)
-        file_menu.addAction(open_action)
-        open_action.triggered.connect(self.open_flightpath)
+        file_menu.addAction(open_flightpath_action)
+        file_menu.addAction(open_source_action)
+        open_flightpath_action.triggered.connect(self.open_flightpath)
+        open_source_action.triggered.connect(self.open_source)
+
+    def open_source(self, _):
+        # set up dialog box
+        dialog = QFileDialog()
+        # allow single file only
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
+        # set accepted formats
+        dialog.setNameFilter('(*.wav)')
+        dialog.exec()
+        filepath = dialog.selectedFiles()
+        print(filepath)
+        if not filepath:
+            return False
+        filepath = filepath[0]
+
+        self.source, fs = sf.read(filepath)
+        # TODO: check source and renderer fs match
+        self.filepath_label.setText(os.path.basename(filepath))
+
+        sourcetime_seconds = len(self.source) / fs
+        self.sourcelen_label.setText(f'{sourcetime_seconds:.1f} s')
+
+    def direct_check(self):
+        if self.direct_checkbox.isChecked():
+            self.direct = True
+        else:
+            self.direct = False
+    
+    def reflect_check(self):
+        if self.reflection_checkbox.isChecked():
+            self.reflection = True
+        else:
+            self.reflection = False
+
+    def atmos_check(self):
+        if self.atmos_checkbox.isChecked():
+            self.atmos = True
+        else:
+            self.atmos = False
 
     def mapping_changed(self, index):
         self.renderer.loudspeaker_mapping = \

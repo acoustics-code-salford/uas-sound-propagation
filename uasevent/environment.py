@@ -29,7 +29,7 @@ class UASEventRenderer():
         self.flight_parameters = flight_parameters
         '''Segment-wise description of flight path'''
 
-    def render(self, x):
+    def render(self, x, direct=True, reflection=True):
         '''
         Renders output signal based on input parameters.
 
@@ -43,35 +43,44 @@ class UASEventRenderer():
         `output`
             Signal containing direct and reflected paths reaching receiver.
         '''
-        # apply each propagation path to input signal
-        direct = self.direct_path.process(x)
-        reflection = self.ground_reflection.process(x)
+        # this series of if statements is a bit crude
+        # will need to implement a list of some kind especially when other
+        # reflecting surfaces are added as a feature
+        if direct:
+            # apply propagation path to input signal
+            direct = self.direct_path.process(x)
+            # add back channel dimension if mono output
+            if direct.shape[0] == 1:
+                reflection = np.expand_dims(reflection, 0)
 
-        # in samples
-        offset = (self.ground_reflection._init_delay
-                  - self.direct_path._init_delay)
+        if reflection:
+            reflection = self.ground_reflection.process(x)
 
-        # calculate whole and fractional number of samples to delay reflection
-        whole_offset, frac_offset = utils.nearest_whole_fraction(offset)
+        if direct and reflection:
+            # in samples
+            offset = (self.ground_reflection._init_delay
+                    - self.direct_path._init_delay)
 
-        # calculate fractional delay of reflection)
-        reflection = np.array([
-            i for i in interpolators.SincInterpolator(reflection, frac_offset)
-        ])
+            # calculate whole and fractional number of samples to delay reflection
+            whole_offset, frac_offset = utils.nearest_whole_fraction(offset)
 
-        # add back channel dimension if mono output
-        if direct.shape[0] == 1:
-            reflection = np.expand_dims(reflection, 0)
+            # calculate fractional delay of reflection)
+            reflection = np.array([
+                i for i in interpolators.SincInterpolator(reflection, frac_offset)
+            ])
 
-        # add zeros to start of reflection to account for whole sample delay
-        if whole_offset:
-            reflection_zeros = np.zeros_like(reflection)
-            reflection_zeros[:, whole_offset:] += reflection[:, :-whole_offset]
-            reflection = reflection_zeros
-        self._d = direct.T
-        self._r = reflection.T
-        output = direct.T + reflection.T
-        return output
+            # add zeros to start of reflection to account for whole sample delay
+            if whole_offset:
+                reflection_zeros = np.zeros_like(reflection)
+                reflection_zeros[:, whole_offset:] += reflection[:, :-whole_offset]
+                reflection = reflection_zeros
+            self._d = direct.T
+            self._r = reflection.T
+            return direct.T + reflection.T
+        elif direct and not reflection:
+            return direct.T
+        elif reflection and not direct:
+            return reflection.T
 
     @property
     def receiver_height(self):
