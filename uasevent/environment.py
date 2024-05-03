@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import signal
-from . import interpolators, utils
+import interpolators, utils
 
 
 class UASEventRenderer():
@@ -10,11 +10,11 @@ class UASEventRenderer():
     '''
     def __init__(
             self,
-            flight_parameters,
-            ground_material='grass',
+            flight_parameters=None,
+            ground_material='Grass',
             fs=48_000,
             receiver_height=1.5,
-            loudspeaker_mapping='Octagon + Cube'):
+            loudspeaker_mapping='Stereo'):
         '''
         Initialises all necessary attributes for the UASEventRenderer object.
         '''
@@ -99,14 +99,15 @@ class UASEventRenderer():
 
     @flight_parameters.setter
     def flight_parameters(self, params):
-        self._flightpath = np.empty([3, 0])
+        if params is not None:
+            self._flightpath = np.empty([3, 0])
 
-        for p in params:
-            self._flightpath = np.append(
-                self._flightpath, utils.vector_t(*p), axis=1)
+            for p in params:
+                self._flightpath = np.append(
+                    self._flightpath, utils.vector_t(*p), axis=1)
 
-        self._setup_paths()
-        self._flight_parameters = params
+            self._setup_paths()
+            self._flight_parameters = params
 
     def _setup_paths(self):
         # set up direct and reflected paths
@@ -305,11 +306,11 @@ class GroundReflectionFilter():
     @material.setter
     def material(self, material):
         match material:
-            case 'grass':
+            case 'Grass':
                 self._sigma = 300  # kPa s m^-2
-            case 'soil':
+            case 'Soil':
                 self._sigma = 5000
-            case 'asphalt':
+            case 'Asphalt':
                 self._sigma = 20_000
         self._material = material
 

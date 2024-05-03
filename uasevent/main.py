@@ -6,7 +6,7 @@ import numpy as np
 from utils import load_params
 
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QAction, QPixmap
+from PyQt6.QtGui import QAction, QDoubleValidator
 from PyQt6.QtWidgets import (
     QCheckBox,
     QApplication, 
@@ -19,7 +19,6 @@ from PyQt6.QtWidgets import (
     QTableWidgetItem,
     QMainWindow,
     QLineEdit,
-    QToolBar,
     QLabel,
     QFileDialog
 )
@@ -27,54 +26,69 @@ from PyQt6.QtWidgets import (
 from pathlib import Path
 root_path = str(Path(__file__).parent.parent)
 
+from environment import UASEventRenderer
+
 
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
 
+        self.renderer = UASEventRenderer()
+
         self.setWindowTitle('UAV Sound Propagation')
         layout = QGridLayout()
 
-        flightpath_image = QLabel()
-        pic = QPixmap('flightpath.png')
-        pic = pic.scaledToWidth(300)
-        flightpath_image.setPixmap(pic)
-        # flightpath_image.resize(90, 90)
-        layout.addWidget(flightpath_image, 0, 1)
+        # flightpath_image = QLabel()
+        # pic = QPixmap('flightpath.png')
+        # pic = pic.scaledToWidth(300)
+        # flightpath_image.setPixmap(pic)
+        # # flightpath_image.resize(90, 90)
+        # layout.addWidget(flightpath_image, 0, 1)
 
         # receiver height
-        self.receiver_height_box = QLineEdit('1.5')
-        self.receiver_height_box.setFixedWidth(35)
+        self.last_height_value = '1.5'
+        self.receiver_height_box = QLineEdit(self.last_height_value)
+        self.receiver_height_box.setFixedWidth(40)
+        self.receiver_height_box.editingFinished.connect(
+            self.receiver_height_changed)
 
         # feature check boxes
         self.direct_checkbox = QCheckBox()
         self.reflection_checkbox = QCheckBox()
         self.atmos_checkbox = QCheckBox()
 
+        self.direct_checkbox.setChecked(True)
+        self.reflection_checkbox.setChecked(True)
+        self.atmos_checkbox.setChecked(True)
+
         # ground material dropdown
         materials = ['Grass', 'Soil', 'Asphalt']
         self.material_dropdown = QComboBox()
         self.material_dropdown.addItems(materials)
+        self.material_dropdown.currentIndexChanged.connect(
+            self.ground_material_changed)
 
         # loudspeaker mapping dropdown
         mapping_names = list(json.load(open('mappings/mappings.json')).keys())
         self.mapping_dropdown = QComboBox()
         self.mapping_dropdown.addItems(mapping_names)
+        self.mapping_dropdown.setCurrentIndex(1)
+        self.mapping_dropdown.currentIndexChanged.connect(self.mapping_changed)
 
         # labels
-        filepath_label = QLabel('testscr.wav (19.0 s)')
-        pathlen_label = QLabel('19.0 s')
+        self.filepath_label = QLabel('')
+        self.pathlen_label = QLabel('')
 
         # form
         form = QFormLayout()
-        form.addRow('Receiver Height [metres]', self.receiver_height_box)
+        form.addRow('Receiver Height [m]', self.receiver_height_box)
         form.addRow('Direct Path', self.direct_checkbox)
         form.addRow('Ground Reflection', self.reflection_checkbox)
         form.addRow('Atmospheric Absorption', self.atmos_checkbox)
         form.addRow('Ground Material', self.material_dropdown)
         form.addRow('Loudspeaker Mapping', self.mapping_dropdown)
-        form.addRow('Source File:', filepath_label)
-        form.addRow('Path Length:', pathlen_label)
+        form.addRow('Source File:', self.filepath_label)
+        form.addRow('Path Length:', self.pathlen_label)
         layout.addLayout(form, 0, 0, 1, 1)
 
         # flightpath table
@@ -105,6 +119,22 @@ class MainWindow(QMainWindow):
         file_menu.addAction(open_action)
         open_action.triggered.connect(self.open_flightpath)
 
+    def mapping_changed(self, index):
+        self.renderer.loudspeaker_mapping = \
+            self.mapping_dropdown.itemText(index)
+        
+    def ground_material_changed(self, index):
+        self.renderer.ground_material = self.material_dropdown.itemText(index)
+
+    def receiver_height_changed(self):
+        validator = QDoubleValidator(0.0, 20.0, 2)
+        value = self.receiver_height_box.text()
+        if validator.validate(value, 1)[0].value == 2:
+            self.renderer.receiver_height = float(value)
+            self.last_height_value = value
+        else:
+            self.receiver_height_box.setText(self.last_height_value)
+
     def open_flightpath(self, _):
         # set up dialog box
         dialog = QFileDialog()
@@ -119,15 +149,21 @@ class MainWindow(QMainWindow):
             return False
         filepath = filepath[0]
 
-        params = np.loadtxt(
+        table_params = np.loadtxt(
             filepath,
             delimiter=',',
             skiprows=1,
             usecols=np.arange(0, 4),
             dtype='str'
         ).reshape(-1, 4)
-        #load_params(filepath)
-        self.set_flightpath_table_vals(params)
+        
+        renderer_params = load_params(filepath)
+        
+        self.set_flightpath_table_vals(table_params)
+        self.renderer.flight_parameters = renderer_params
+        
+        pathtime_seconds = len(self.renderer._flightpath.T) / self.renderer.fs
+        self.pathlen_label.setText(f'{pathtime_seconds:.1f} s')
 
     def setup_flightpath_table(self):
         self.flightpath_table = QTableWidget()
@@ -136,8 +172,8 @@ class MainWindow(QMainWindow):
 
         self.flightpath_table.setHorizontalHeaderLabels([
             'Label',
-            'Start [xyz]', 
-            'End [xyz]',
+            'Start x y z [m]', 
+            'End x y z [m]',
             'Speeds [m/s]',
         ])
         
