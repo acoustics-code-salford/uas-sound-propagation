@@ -14,7 +14,8 @@ class UASEventRenderer():
             ground_material='Grass',
             fs=48_000,
             receiver_height=1.5,
-            loudspeaker_mapping='Stereo'):
+            loudspeaker_mapping='Stereo',
+            atmos=True):
         '''
         Initialises all necessary attributes for the UASEventRenderer object.
         '''
@@ -28,6 +29,8 @@ class UASEventRenderer():
         '''Material for ground reflection'''
         self.flight_parameters = flight_parameters
         '''Segment-wise description of flight path'''
+        self.atmos = atmos
+        '''Atmospheric absorption boolean activation'''
 
     def render(self, x, direct=True, reflection=True):
         '''
@@ -118,6 +121,15 @@ class UASEventRenderer():
             self._setup_paths()
             self._flight_parameters = params
 
+    @property
+    def atmos(self):
+        return self._atmos
+    
+    @atmos.setter
+    def atmos(self, val):
+        self._atmos = val
+        self._setup_paths()
+
     def _setup_paths(self):
         # set up direct and reflected paths
         self.direct_path = PropagationPath(
@@ -127,7 +139,8 @@ class UASEventRenderer():
             ),
             None,
             self.fs,
-            loudspeaker_mapping=self.loudspeaker_mapping
+            loudspeaker_mapping=self.loudspeaker_mapping,
+            atmos=self.atmos
         )
 
         self.ground_reflection = PropagationPath(
@@ -137,7 +150,8 @@ class UASEventRenderer():
             ),
             self.ground_material,
             self.fs,
-            loudspeaker_mapping=self.loudspeaker_mapping
+            loudspeaker_mapping=self.loudspeaker_mapping,
+            atmos=self.atmos
         )
 
         self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
@@ -157,11 +171,13 @@ class PropagationPath():
             fs=48_000,
             c=343.0,
             frame_len=512,
-            loudspeaker_mapping='Octagon + Cube'
+            loudspeaker_mapping='Stereo',
+            atmos=True
     ):
         '''
         Initialises PropagationPath object.
         '''
+        self.atmos = atmos
         self.fs = fs
         '''Sampling frequency in Hz (default `48_000`)'''
         self.reflection_surface = reflection_surface
@@ -232,8 +248,9 @@ class PropagationPath():
         # list of filter stages
         filters = []
 
-        # add atmospheric absorption
-        filters.append(AtmosphericAbsorptionFilter())
+        if self.atmos:
+            # add atmospheric absorption
+            filters.append(AtmosphericAbsorptionFilter())
 
         # add ground filter if surface is set (reflected path)
         if self.reflection_surface is not None:

@@ -164,9 +164,9 @@ class MainWindow(QMainWindow):
 
     def atmos_check(self):
         if self.atmos_checkbox.isChecked():
-            self.atmos = True
+            self.renderer.atmos = True
         else:
-            self.atmos = False
+            self.renderer.atmos = False
 
     def mapping_changed(self, index):
         self.renderer.loudspeaker_mapping = \
@@ -210,7 +210,12 @@ class MainWindow(QMainWindow):
         
         self.set_flightpath_table_vals(table_params)
         self.renderer.flight_parameters = renderer_params
+
+        # TODO: json-based flightpath file format (simplify)
         
+        # TODO: simpler way to calculate this without having to calculate the 
+        # whole flightpath every time - flightpath should only be calculated
+        # when pressing the 'render' button, as it does take a short while
         pathtime_seconds = len(self.renderer._flightpath.T) / self.renderer.fs
         self.pathlen_label.setText(f'{pathtime_seconds:.1f} s')
 
