@@ -44,6 +44,10 @@ class UASEventRenderer():
         `output`
             Signal containing direct and reflected paths reaching receiver.
         '''
+
+        if x.ndim > 1:
+            raise ValueError("Input source signal is not monaural.")
+
         # apply each propagation path to input signal
         direct = self.direct_path.process(x)
         reflection = self.ground_reflection.process(x)
@@ -204,7 +208,7 @@ class PropagationPath():
         return out
 
     def _apply_attenuation(self, x):
-        return x * self._inv_sqr_attn
+        return x #* self._inv_sqr_attn
 
     def _filter(self, x):
         # neat trick to get windowed frames
