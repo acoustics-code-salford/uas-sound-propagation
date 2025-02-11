@@ -1,4 +1,5 @@
 import numpy as np
+from toolz import pipe
 from scipy import signal
 from . import interpolators, utils
 
@@ -66,7 +67,7 @@ class UASEventRenderer():
         # add zeros to start of reflection to account for whole sample delay
         if whole_offset:
             reflection_zeros = np.zeros_like(reflection)
-            reflection_zeros[:, whole_offset:] += reflection[:, :-whole_offset]
+            reflection_zeros[whole_offset:] += reflection[:-whole_offset]
             reflection = reflection_zeros
         self._d = direct.T
         self._r = reflection.T
@@ -172,7 +173,6 @@ class PropagationPath():
         # calculate amplitude envelopes for each loudspeaker
         self.flightpath = flightpath
         '''Array describing position of source at every sample point.'''
-        self._amp_envs = self._calculate_amp_envs(self._ls_locs)
 
         # calculate delays and amplitude curve
         _, _, r = utils.cart_to_sph(flightpath)
@@ -186,14 +186,6 @@ class PropagationPath():
             np.lib.stride_tricks.sliding_window_view(
                 flightpath, self.frame_len, 1)[:, ::self._hop_len].mean(2)
         ).T
-
-    def _calculate_amp_envs(self, loudspeaker_locs):
-        dbap = DBAP(loudspeaker_locs)
-        fpath = np.copy(self.flightpath)
-        # clip flightpath to (approximate) surface of array convex hull
-        fpath = (fpath / np.linalg.norm(fpath, axis=0)) *\
-            np.mean(np.linalg.norm(dbap._ls_pos, axis=0))
-        return dbap.gains(fpath.T)
 
     def _apply_doppler(self, x):
         # init output array and initial read position
@@ -211,8 +203,8 @@ class PropagationPath():
 
         return out
 
-    def _apply_amp_envs(self, x):
-        return x * self._inv_sqr_attn * self._amp_envs
+    def _apply_attenuation(self, x):
+        return x * self._inv_sqr_attn
 
     def _filter(self, x):
         # neat trick to get windowed frames
@@ -261,12 +253,13 @@ class PropagationPath():
         if len(x) < len(self._delta_delays + 1):
             raise ValueError('Input signal shorter than path to be rendered')
 
-        output = \
-            self._apply_amp_envs(
-                    self._filter(
-                        self._apply_doppler(x)
-                    )
-                )
+        # output = \
+        #     self._apply_attenuation(
+        #             self._filter(
+        #                 self._apply_doppler(x)
+        #             )
+        #         )
+        output = pipe(x, self._apply_doppler, self._filter, self._apply_attenuation)
         return output
 
 
@@ -419,66 +412,3 @@ class AtmosphericAbsorptionFilter():
                          fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
 
-
-class DBAP():
-    '''
-    Implements distance-based amplitude panning.
-    Based on https://github.com/PasqualeMainolfi/Pannix/
-
-    '''
-    def __init__(self, loudspeaker_locs):
-        '''
-        Initialises DBAP.
-        '''
-        self.loudspeaker_locs = loudspeaker_locs
-        '''Array defining cartesian locations of array loudspeakers.'''
-        self._ls_pos = self.loudspeaker_locs.T
-        self._spat_blur = np.mean(np.linalg.norm(self._ls_pos, axis=0)) + 0.2
-        self._eta = self._spat_blur / len(self._ls_pos.T)
-
-    def _loudspeaker_distance(self, pos_arr):
-        return np.array(
-            [
-                np.sqrt(
-                    np.sum(
-                        (self._ls_pos.T - pos)**2, axis=1
-                    ) + self._spat_blur**2
-                )
-                for pos in pos_arr
-            ])
-
-    def _b(self, d):
-        u = d.T - d.max(axis=1)
-        u = u**2 + self._eta
-        um = np.median(d, axis=1)
-        return (2*u / um)**2 + 1
-
-    def _k(self, b, d):
-        k_den = np.sqrt(
-            np.sum(
-                (b**2).T /
-                (d**2), axis=1
-            )
-        )
-        return 1 / k_den
-
-    def gains(self, pos_arr):
-        '''
-        Calculates gains applicable to each loudspeaker for input array of
-        source positions.
-
-        Parameters
-        ----------
-        `pos_arr`
-            Array describing position of source at each sample time.
-
-        Returns
-        -------
-        `gains`
-            Array of gains for specified loudspeaker layout.
-        '''
-        d = self._loudspeaker_distance(pos_arr)
-        b = self._b(d)
-        k = self._k(b, d)
-        gains = (k * b) / d.T
-        return gains
