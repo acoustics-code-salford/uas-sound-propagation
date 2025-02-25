@@ -1,3 +1,4 @@
+import json
 import numpy as np
 from toolz import pipe
 from scipy import signal
@@ -14,21 +15,18 @@ class UASEventRenderer():
             flight_parameters,
             ground_material='grass',
             fs=48_000,
-            receiver_height=1.5,
-            loudspeaker_mapping='Octagon + Cube'):
+            receiver_height=1.5):
         '''
         Initialises all necessary attributes for the UASEventRenderer object.
         '''
-        self.loudspeaker_mapping = loudspeaker_mapping
-        '''Layout of loudspeaker array for rendering'''
         self.fs = fs
         '''Sampling frequency in Hz (default 48_000)'''
         self.receiver_height = receiver_height
         '''Height of receiver position, metres (default 1.5)'''
         self.ground_material = ground_material
         '''Material for ground reflection'''
-        self.flight_parameters = flight_parameters
-        '''Segment-wise description of flight path'''
+        self.flight_parameters = flight_parameters #json.load(open(flight_parameters))
+        '''JSON file with segmentwise description of flight path'''
 
     def render(self, x):
         '''
@@ -104,11 +102,16 @@ class UASEventRenderer():
 
     @flight_parameters.setter
     def flight_parameters(self, params):
+
+        self.params_file = params
+
+        params = json.load(open(params))
+        
         self._flightpath = np.empty([3, 0])
 
-        for p in params:
+        for _, p in params.items():
             self._flightpath = np.append(
-                self._flightpath, utils.vector_t(*p), axis=1)
+                self._flightpath, utils.vector_t(p), axis=1)
 
         self._setup_paths()
         self._flight_parameters = params
@@ -121,8 +124,7 @@ class UASEventRenderer():
                  self._flightpath[2:] - self.receiver_height)
             ),
             None,
-            self.fs,
-            loudspeaker_mapping=self.loudspeaker_mapping
+            self.fs
         )
 
         self.ground_reflection = PropagationPath(
@@ -131,8 +133,7 @@ class UASEventRenderer():
                  - self._flightpath[2:] - self.receiver_height)
             ),
             self.ground_material,
-            self.fs,
-            loudspeaker_mapping=self.loudspeaker_mapping
+            self.fs
         )
 
         self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
@@ -151,8 +152,7 @@ class PropagationPath():
             reflection_surface=None,
             fs=48_000,
             c=343.0,
-            frame_len=512,
-            loudspeaker_mapping='Octagon + Cube'
+            frame_len=512
     ):
         '''
         Initialises PropagationPath object.
@@ -166,15 +166,7 @@ class PropagationPath():
         '''Number of samples for frames used for time-varying atmospheric
         absorption and ground reflection filtering (default `512`).'''
         self._hop_len = frame_len // 2
-
-        # load loudspeaker layout
-        self.loudspeaker_mapping = loudspeaker_mapping
-        '''String to select layout of loudspeaker array for rendering
-        (default `"Octagon + Cube"`).'''
-        _, th, ph, r = utils.load_mapping(loudspeaker_mapping)
-        self._ls_locs = utils.sph_to_cart(np.array([th, ph, r]).T)
-
-        # calculate amplitude envelopes for each loudspeaker
+        '''Number of samples to hop between frames.'''
         self.flightpath = flightpath
         '''Array describing position of source at every sample point.'''
 

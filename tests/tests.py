@@ -1,3 +1,4 @@
+import json
 import random
 import unittest
 import numpy as np
@@ -99,12 +100,12 @@ class TestRender(unittest.TestCase):
         super().__init__(methodName)
 
         self.x, fs = sf.read('tests/testsrc.wav')
-        params = utils.load_params('tests/test_flight.csv')
+        params = f = json.load(open('test_flight.json'))
         self.renderer = UASEventRenderer(params, 'asphalt', fs, 1.5)
         self.xout = self.renderer.render(self.x)
         self.dir_x = self.renderer._d
 
-        params_2 = utils.load_params('tests/test_flight_2.csv')
+        params_2 = params = f = json.load(open('test_flight_2.json'))
         self.renderer_2 = UASEventRenderer(params_2, 'asphalt', fs, 1.5)
 
     def test_output_sensible(self):

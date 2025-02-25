@@ -29,21 +29,6 @@ def test_sine(t, f_0=440, A=0.75, fs=48_000):
     return sig
 
 
-def load_params(csv_file):
-    '''Load flight parameters from a csv file to required array format.'''
-    str_params = np.loadtxt(
-        csv_file,
-        delimiter=',',
-        skiprows=1,
-        usecols=np.arange(1, 4),
-        dtype='str'
-    ).reshape(-1, 3)  # reshape in case of single-event flight
-
-    return [[np.array(cell.strip().split(' '), dtype=float)
-            for cell in row]
-            for row in str_params]
-
-
 def nearest_whole_fraction(pos):
     '''Return nearest integer and fraction to input sample position.'''
     n = np.round(pos).astype(int)
@@ -82,17 +67,13 @@ def cart_to_sph(xyz, return_r=True):
     return sph_coords
 
 
-def vector_t(start, end, speeds, fs=48_000):
+def vector_t(pathdict, fs=48_000):
     '''
     Calculate source position at each sample time along specified trajectory.
 
     Parameters
     ----------
-    `start`: Cartesian co-ordinates of starting position.
-
-    `end`: Cartesian co-ordinates of ending position.
-
-    `speeds`: Start and end speeds of specified flight segment.
+    `pathdict`: Specifies start and end positions and speeds of flight segment.
 
     `fs`: Sampling frequency [Hz] (default 48_000)
 
@@ -101,6 +82,11 @@ def vector_t(start, end, speeds, fs=48_000):
     `xyz`: Array describing position of source at each sample time based on
     the specified flight segment.
     '''
+
+    start = np.array(pathdict['start'])
+    end = np.array(pathdict['end'])
+    speeds = np.array(pathdict['speeds'])
+
     v_0, v_T = speeds
     distance = np.linalg.norm(start - end)
     # heading of source

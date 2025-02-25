@@ -1,5 +1,0 @@
-segment, startxyz, endxyz, speeds
-constant-speed flyby, 10 -200 30, 10 180 30, 30 30
-decelerate, 10 180 30, 10 200 30, 30 0
-accelerate, 10 200 30, 10 180 30, 0 30
-flyby back, 10 180 30, 10 -200 30, 30 30
