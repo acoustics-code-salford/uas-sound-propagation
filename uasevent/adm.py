@@ -16,15 +16,13 @@ class TrajectoryToADMXML():
         self.event_name = event_name
         self._block_id = 1
         self._rtime = 0.0
+        self.pretty_xml = None
 
-    def write_adm(self, filepath):
         self.element_tree_setup()
         self.segment_process()
         self.element_tree_close()
-        self.write_xml(filepath)
-        self._rtime = 0.0
-        self._block_id = 1
-
+        self.make_xml()
+        
     @property
     def json_trajectory_file(self):
         return self._json_trajectory_file
@@ -155,18 +153,23 @@ class TrajectoryToADMXML():
                       ).text = "AC_00031001"
         ET.SubElement(audioTrackUID, "audioPackFormatIDRef"
                       ).text = "AP_00031001"
+        self._rtime = 0.0
+        self._block_id = 1
     
-    def write_xml(self, filepath):
+    def make_xml(self):
         # Convert XML tree to string
         adm_xml = ET.tostring(self._ebuCoreMain,
                               encoding="unicode", method="xml")
 
         # Pretty-print the XML with indentation
         dom = xml.dom.minidom.parseString(adm_xml)
-        pretty_xml = dom.toprettyxml(indent="   ")
-
+        self.pretty_xml = dom.toprettyxml(indent="   ")
+    
+    def write_xml(self, filepath):
+        if not self.pretty_xml:
+            raise ValueError("No XML data to write. Run make_adm() first.")
         with open(filepath, "w", encoding="utf-8") as f:
-            f.write(pretty_xml)
+            f.write(self.pretty_xml)
 
     def segment_process(self):
         for _, segment in self.trajectory.items():

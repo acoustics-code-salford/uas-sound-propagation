@@ -132,7 +132,7 @@ audioChannelFormat = ET.SubElement(audioFormatExtended, "audioChannelFormat",
 # Process each flight segment
 block_id = 1
 rtime = 0.0
-for segment_name, segment in trajectory.items():
+for _, segment in trajectory.items():
     start, end, speeds = segment["start"], segment["end"], segment["speeds"]
     
     total_duration = estimate_duration(start, end, speeds)

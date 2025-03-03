@@ -1,8 +1,10 @@
+import os
 import json
 import numpy as np
+import soundfile as sf
 from toolz import pipe
 from scipy import signal
-from . import interpolators, utils
+from . import adm, interpolators, utils
 
 
 class UASEventRenderer():
@@ -12,7 +14,7 @@ class UASEventRenderer():
     '''
     def __init__(
             self,
-            flight_parameters,
+            flight_spec,
             ground_material='grass',
             fs=48_000,
             receiver_height=1.5):
@@ -25,8 +27,12 @@ class UASEventRenderer():
         '''Height of receiver position, metres (default 1.5)'''
         self.ground_material = ground_material
         '''Material for ground reflection'''
-        self.flight_parameters = flight_parameters #json.load(open(flight_parameters))
+        self.adm_xml = adm.TrajectoryToADMXML(flight_spec)
+        '''Object to construct ADM XML file to be written out'''
+        self.flight_parameters = json.load(open(flight_spec))
         '''JSON file with segmentwise description of flight path'''
+        self.output = None
+        '''Initialise var to contain rendered signal'''
 
     def render(self, x):
         '''
@@ -74,7 +80,21 @@ class UASEventRenderer():
         self._d = direct.T
         self._r = reflection.T
         output = direct.T + reflection.T
+
+        self.output = output
+
         return output
+
+    def write_output(self, filename):
+        '''
+        Writes out rendered signal and associated ADM XML file.
+        '''
+        filename = os.path.basename(filename)
+        if self.output:
+            sf.write(f'{filename}.wav', self.output, self.fs, 'PCM_24')
+            self.adm_xml.write_adm(f'{filename}.xml')
+        else:
+            raise ValueError('No output signal to write out')
 
     @property
     def receiver_height(self):
@@ -102,11 +122,6 @@ class UASEventRenderer():
 
     @flight_parameters.setter
     def flight_parameters(self, params):
-
-        self.params_file = params
-
-        params = json.load(open(params))
-        
         self._flightpath = np.empty([3, 0])
 
         for _, p in params.items():
@@ -200,7 +215,7 @@ class PropagationPath():
         return out
 
     def _apply_attenuation(self, x):
-        return x #* self._inv_sqr_attn
+        return x * self._inv_sqr_attn
 
     def _filter(self, x):
         # neat trick to get windowed frames
