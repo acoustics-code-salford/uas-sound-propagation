@@ -67,50 +67,6 @@ def cart_to_sph(xyz, return_r=True):
     return sph_coords
 
 
-def vector_t(pathdict, fs=48_000):
-    '''
-    Calculate source position at each sample time along specified trajectory.
-
-    Parameters
-    ----------
-    `pathdict`: Specifies start and end positions and speeds of flight segment.
-
-    `fs`: Sampling frequency [Hz] (default 48_000)
-
-    Returns
-    -------
-    `xyz`: Array describing position of source at each sample time based on
-    the specified flight segment.
-    '''
-
-    start = np.array(pathdict['start'])
-    end = np.array(pathdict['end'])
-    speeds = np.array(pathdict['speeds'])
-
-    v_0, v_T = speeds
-    distance = np.linalg.norm(start - end)
-    # heading of source
-    vector = ((end - start) / distance)
-    # acceleration
-    a = ((v_T**2) - (v_0**2)) / (2 * distance)
-    # number of time steps in samples for operation
-    n_output_samples = fs * ((v_T-v_0) / a) if a != 0 else \
-        (distance / v_0) * fs
-
-    # array of positions at each time step
-    x_t = np.array([
-        [
-            (v_0 * (t / fs))
-            + ((a * (t / fs)**2) / 2)
-            for t in range(int(n_output_samples))
-        ]
-    ]).T
-
-    # map to axes
-    xyz = (start + vector * x_t).T
-    return xyz
-
-
 def rectify(x):
     '''Rectifies signal (negative segments mirrored into positive).'''
     return (np.abs(x) + x) / 2

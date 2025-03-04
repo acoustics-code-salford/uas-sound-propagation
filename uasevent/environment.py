@@ -4,7 +4,7 @@ import numpy as np
 import soundfile as sf
 from toolz import pipe
 from scipy import signal
-from . import adm, interpolators, utils
+from . import interpolators, utils
 
 
 class UASEventRenderer():
@@ -27,8 +27,6 @@ class UASEventRenderer():
         '''Height of receiver position, metres (default 1.5)'''
         self.ground_material = ground_material
         '''Material for ground reflection'''
-        self.adm_xml = adm.TrajectoryToADMXML(flight_spec)
-        '''Object to construct ADM XML file to be written out'''
         self.flight_parameters = json.load(open(flight_spec))
         '''JSON file with segmentwise description of flight path'''
         self.output = None
@@ -83,18 +81,37 @@ class UASEventRenderer():
 
         self.output = output
 
-        return output
+    def write_output(self, filename, output='combined'):
 
-    def write_output(self, filename):
-        '''
-        Writes out rendered signal and associated ADM XML file.
-        '''
-        filename = os.path.basename(filename)
-        if self.output:
-            sf.write(f'{filename}.wav', self.output, self.fs, 'PCM_24')
-            self.adm_xml.write_adm(f'{filename}.xml')
-        else:
+        filename = os.path.splitext(filename)[0]
+        if self.output is None:
             raise ValueError('No output signal to write out')
+
+        if output == 'combined':
+            self._write_outfiles(filename, self.output)
+        elif output == 'direct':
+            self._write_outfiles(f'{filename}_direct', 
+                                 self._d, path_type='direct')
+        elif output == 'reflection':
+            self._write_outfiles(f'{filename}_reflection', 
+                                 self._r, path_type='reflection')
+        else:
+            raise ValueError('Invalid output type')
+        
+    def _write_outfiles(self, filename, data,
+                        start_t=0.0,
+                        path_type='direct', 
+                        coord_fmt='unity'):
+        
+        sf.write(f'{filename}.wav', data, self.fs, 'PCM_24')
+        np.savetxt(
+            f'{filename}.csv', self._flightpath(
+                receiver_height=self.receiver_height,
+                path_type=path_type,
+                coord_fmt=coord_fmt).T, 
+            delimiter=',', fmt='%.2f', 
+            header=f't={start_t}, fmt={coord_fmt}, path={path_type}'
+        )
 
     @property
     def receiver_height(self):
@@ -122,33 +139,29 @@ class UASEventRenderer():
 
     @flight_parameters.setter
     def flight_parameters(self, params):
-        self._flightpath = np.empty([3, 0])
-
-        for _, p in params.items():
-            self._flightpath = np.append(
-                self._flightpath, utils.vector_t(p), axis=1)
-
+        self._flightpath = FlightPath(params, fs=self.fs)
         self._setup_paths()
         self._flight_parameters = params
 
     def _setup_paths(self):
         # set up direct and reflected paths
         self.direct_path = PropagationPath(
-            np.concatenate(
-                (self._flightpath[:2],
-                 self._flightpath[2:] - self.receiver_height)
+            self._flightpath(
+                receiver_height=self.receiver_height,
+                path_type='direct',
+                fs=self.fs
             ),
-            None,
             self.fs
         )
 
         self.ground_reflection = PropagationPath(
-            np.concatenate(
-                (self._flightpath[:2],
-                 - self._flightpath[2:] - self.receiver_height)
+            self._flightpath(
+                receiver_height=self.receiver_height,
+                path_type='reflection',
+                fs=self.fs
             ),
-            self.ground_material,
-            self.fs
+            self.fs,
+            self.ground_material
         )
 
         self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
@@ -164,8 +177,8 @@ class PropagationPath():
     def __init__(
             self,
             flightpath,
-            reflection_surface=None,
             fs=48_000,
+            reflection_surface=None,
             c=343.0,
             frame_len=512
     ):
@@ -264,13 +277,12 @@ class PropagationPath():
         if len(x) < len(self._delta_delays + 1):
             raise ValueError('Input signal shorter than path to be rendered')
 
-        # output = \
-        #     self._apply_attenuation(
-        #             self._filter(
-        #                 self._apply_doppler(x)
-        #             )
-        #         )
-        output = pipe(x, self._apply_doppler, self._filter, self._apply_attenuation)
+        output = pipe(
+            x, 
+            self._apply_doppler, 
+            self._filter, 
+            self._apply_attenuation
+        )
         return output
 
 
@@ -423,3 +435,75 @@ class AtmosphericAbsorptionFilter():
                          fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
 
+
+class FlightPath():
+    def __init__(self, 
+                 flight_spec,
+                 fs=50):
+        
+        self.flight_spec = flight_spec
+        self.fs = fs
+
+    def __call__(self,
+                 fs=50,
+                 receiver_height=0.0,
+                 path_type='direct',
+                 coord_fmt='default'):
+        
+        flightpath = self._calc_flightpath(
+            flight_spec=self.flight_spec, fs=fs)
+
+        if path_type == 'direct':
+            flightpath[2] = flightpath[2] - receiver_height
+        elif path_type == 'reflection':
+            flightpath[2] = - flightpath[2] - receiver_height
+        else:
+            raise ValueError(
+                'Path type must be either "direct" or "reflection"'
+            )
+
+        if coord_fmt == 'unity':
+            return flightpath[[0, 2, 1]]
+        elif coord_fmt == 'default':
+            return flightpath
+        else:
+            raise ValueError(
+                'Coordinate format must be either "unity" or "default"'
+            )
+
+    def _calc_flightpath(self, flight_spec, fs):
+        flightpath = np.empty([3, 0])
+        for _, p in flight_spec.items():
+            flightpath = np.append(
+                flightpath, self.vector_t(p, fs), axis=1
+            )
+        return flightpath
+        
+
+    def vector_t(self, flight_spec, fs):
+        start = np.array(flight_spec['start'])
+        end = np.array(flight_spec['end'])
+        speeds = np.array(flight_spec['speeds'])
+
+        v_0, v_T = speeds
+        distance = np.linalg.norm(start - end)
+        # heading of source
+        vector = ((end - start) / distance)
+        # acceleration
+        a = ((v_T**2) - (v_0**2)) / (2 * distance)
+        # number of time steps in samples for operation
+        n_output_samples = fs * ((v_T-v_0) / a) if a != 0 else \
+            (distance / v_0) * fs
+
+        # array of positions at each time step
+        x_t = np.array([
+            [
+                (v_0 * (t / fs))
+                + ((a * (t / fs)**2) / 2)
+                for t in range(int(n_output_samples))
+            ]
+        ]).T
+
+        # map to axes
+        xyz = (start + vector * x_t).T
+        return xyz
