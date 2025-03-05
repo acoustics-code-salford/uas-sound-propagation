@@ -85,12 +85,12 @@ class TestTrajectoryCalc(unittest.TestCase):
 
         # constant speed trajectory should end very near where specified
         assert_array_almost_equal(long_dist_const_traj[-1],
-                                  large_distance_const_speed[1],
+                                  large_distance_const_speed['end'],
                                   3)
 
         # accelerating trajectory should end very near where specified
         assert_array_almost_equal(long_accel_traj[-1],
-                                  large_distance_accel[1],
+                                  large_distance_accel['end'],
                                   3)
 
 
