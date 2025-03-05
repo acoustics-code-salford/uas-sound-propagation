@@ -4,7 +4,7 @@ import numpy as np
 import soundfile as sf
 import uasevent.utils as utils
 import uasevent.interpolators as interpolators
-from uasevent.environment import UASEventRenderer
+from uasevent.environment import UASEventRenderer, FlightPath
 from numpy.testing import assert_array_almost_equal
 
 
