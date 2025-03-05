@@ -437,7 +437,7 @@ class AtmosphericAbsorptionFilter():
 
 
 class FlightPath():
-    def __init__(self,flight_spec):
+    def __init__(self, flight_spec):
 
         self.flight_spec = flight_spec
 
