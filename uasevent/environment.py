@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 import soundfile as sf
+import multiprocessing
 from toolz import pipe
 from scipy import signal
 from . import interpolators, utils
@@ -50,9 +51,23 @@ class UASEventRenderer():
         if x.ndim > 1:
             raise ValueError("Input source signal is not monaural.")
 
-        # apply each propagation path to input signal
-        direct = self.direct_path.process(x)
-        reflection = self.ground_reflection.process(x)
+        # apply each propagation path to input signal (parallel)
+        pathlist = [self.direct_path, self.ground_reflection]
+        manager = multiprocessing.Manager()
+        return_list = manager.list()
+        jobs = []
+        for path in pathlist:
+            p = multiprocessing.Process(
+                target=self.worker, 
+                args=(path, x, return_list))
+            jobs.append(p)
+            p.start()
+
+        for proc in jobs:
+            proc.join()
+
+        direct = return_list[0]
+        reflection = return_list[1]
 
         # in samples
         offset = (self.ground_reflection._init_delay
@@ -164,6 +179,13 @@ class UASEventRenderer():
         self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
         self.direct_path._inv_sqr_attn /= self._norm_scaling
         self.ground_reflection._inv_sqr_attn /= self._norm_scaling
+    
+    def worker(self, object, x, return_list):
+        '''
+        Basic framework for parallel processes
+        '''
+        path_output = object.process(x)
+        return_list.append(path_output)
 
 
 class PropagationPath():
