@@ -1,4 +1,3 @@
-import json
 import random
 import unittest
 import numpy as np
@@ -51,31 +50,31 @@ class TestInterpolators(unittest.TestCase):
 
 class TestTrajectoryCalc(unittest.TestCase):
     def test_trajectory(self):
-        fast_accel = [np.array([0,    0,   30]),
-                      np.array([20,   0,  30]),
-                      np.array([0, 10])]
+        fast_accel = {'start': np.array([0,  0, 30]),
+                      'end': np.array([20,  0, 30]),
+                      'speeds': np.array([0, 10])}
 
-        slow_accel = [np.array([0,    0,   30]),
-                      np.array([20,   0,  30]),
-                      np.array([0, 5])]
+        slow_accel = {'start': np.array([0,  0, 30]),
+                      'end': np.array([20,  0, 30]),
+                      'speeds': np.array([0, 5])}
 
-        large_distance_const_speed = [np.array([0,    0,   30]),
-                                      np.array([200,   200,  30]),
-                                      np.array([30, 30])]
+        large_distance_const_speed = {'start': np.array([0, 0, 30]),
+                                      'end': np.array([200, 200, 30]),
+                                      'speeds': np.array([30, 30])}
 
-        large_distance_accel = [np.array([-200,    0,   30]),
-                                np.array([100,   50,  30]),
-                                np.array([20, 30])]
+        large_distance_accel = {'start': np.array([-200, 0, 30]),
+                                'end': np.array([100, 50, 30]),
+                                'speeds': np.array([20, 30])}
 
-        large_distance_decel = [np.array([-200,    0,   30]),
-                                np.array([100,   50,  30]),
-                                np.array([30, 20])]
+        large_distance_decel = {'start': np.array([-200, 0, 30]),
+                                'end': np.array([100, 50, 30]),
+                                'speeds': np.array([30, 20])}
 
-        fast_traj = utils.vector_t(*fast_accel).T
-        slow_traj = utils.vector_t(*slow_accel).T
-        long_dist_const_traj = utils.vector_t(*large_distance_const_speed).T
-        long_accel_traj = utils.vector_t(*large_distance_accel).T
-        long_decel_traj = utils.vector_t(*large_distance_decel).T
+        fast_traj = utils.vector_t(fast_accel).T
+        slow_traj = utils.vector_t(slow_accel).T
+        long_dist_const_traj = utils.vector_t(large_distance_const_speed).T
+        long_accel_traj = utils.vector_t(large_distance_accel).T
+        long_decel_traj = utils.vector_t(large_distance_decel).T
 
         # lower acceleration should result in longer trajectories
         self.assertGreater(len(slow_traj), len(fast_traj))
@@ -86,12 +85,12 @@ class TestTrajectoryCalc(unittest.TestCase):
 
         # constant speed trajectory should end very near where specified
         assert_array_almost_equal(long_dist_const_traj[-1],
-                                  large_distance_const_speed[1],
+                                  large_distance_const_speed['end'],
                                   3)
 
         # accelerating trajectory should end very near where specified
         assert_array_almost_equal(long_accel_traj[-1],
-                                  large_distance_accel[1],
+                                  large_distance_accel['end'],
                                   3)
 
 
@@ -100,12 +99,12 @@ class TestRender(unittest.TestCase):
         super().__init__(methodName)
 
         self.x, fs = sf.read('tests/testsrc.wav')
-        params = json.load(open('test_flight.json'))
+        params = 'tests/test_flight.json'
         self.renderer = UASEventRenderer(params, 'asphalt', fs, 1.5)
         self.xout = self.renderer.render(self.x)
         self.dir_x = self.renderer._d
 
-        params_2 = json.load(open('test_flight_2.json'))
+        params_2 = 'tests/test_flight_2.json'
         self.renderer_2 = UASEventRenderer(params_2, 'asphalt', fs, 1.5)
 
     def test_output_sensible(self):
