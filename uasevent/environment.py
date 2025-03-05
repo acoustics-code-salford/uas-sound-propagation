@@ -90,26 +90,26 @@ class UASEventRenderer():
         if output == 'combined':
             self._write_outfiles(filename, self.output)
         elif output == 'direct':
-            self._write_outfiles(f'{filename}_direct', 
+            self._write_outfiles(f'{filename}_direct',
                                  self._d, path_type='direct')
         elif output == 'reflection':
-            self._write_outfiles(f'{filename}_reflection', 
+            self._write_outfiles(f'{filename}_reflection',
                                  self._r, path_type='reflection')
         else:
             raise ValueError('Invalid output type')
-        
+
     def _write_outfiles(self, filename, data,
                         start_t=0.0,
-                        path_type='direct', 
+                        path_type='direct',
                         coord_fmt='unity'):
-        
+
         sf.write(f'{filename}.wav', data, self.fs, 'PCM_24')
         np.savetxt(
             f'{filename}.csv', self._flightpath(
                 receiver_height=self.receiver_height,
                 path_type=path_type,
-                coord_fmt=coord_fmt).T, 
-            delimiter=',', fmt='%.2f', 
+                coord_fmt=coord_fmt).T,
+            delimiter=',', fmt='%.2f',
             header=f't={start_t}, fmt={coord_fmt}, path={path_type}'
         )
 
@@ -278,9 +278,9 @@ class PropagationPath():
             raise ValueError('Input signal shorter than path to be rendered')
 
         output = pipe(
-            x, 
-            self._apply_doppler, 
-            self._filter, 
+            x,
+            self._apply_doppler,
+            self._filter,
             self._apply_attenuation
         )
         return output
@@ -437,10 +437,10 @@ class AtmosphericAbsorptionFilter():
 
 
 class FlightPath():
-    def __init__(self, 
+    def __init__(self,
                  flight_spec,
                  fs=50):
-        
+
         self.flight_spec = flight_spec
         self.fs = fs
 
@@ -449,7 +449,7 @@ class FlightPath():
                  receiver_height=0.0,
                  path_type='direct',
                  coord_fmt='default'):
-        
+
         flightpath = self._calc_flightpath(
             flight_spec=self.flight_spec, fs=fs)
 
@@ -478,7 +478,6 @@ class FlightPath():
                 flightpath, self.vector_t(p, fs), axis=1
             )
         return flightpath
-        
 
     def vector_t(self, flight_spec, fs):
         start = np.array(flight_spec['start'])
