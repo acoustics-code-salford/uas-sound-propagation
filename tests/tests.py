@@ -50,31 +50,51 @@ class TestInterpolators(unittest.TestCase):
 
 class TestTrajectoryCalc(unittest.TestCase):
     def test_trajectory(self):
-        fast_accel = {'start': np.array([0,  0, 30]),
-                      'end': np.array([20,  0, 30]),
-                      'speeds': np.array([0, 10])}
+        fast_accel = {
+            'fast_accel': {
+                'start': np.array([0, 0, 30]),
+                'end': np.array([20, 0, 30]),
+                'speeds': np.array([0, 10])
+            }
+        }
 
-        slow_accel = {'start': np.array([0,  0, 30]),
-                      'end': np.array([20,  0, 30]),
-                      'speeds': np.array([0, 5])}
+        slow_accel = {
+            'slow_accel': {
+                'start': np.array([0,  0, 30]),
+                'end': np.array([20,  0, 30]),
+                'speeds': np.array([0, 5])
+            }
+        }
 
-        large_distance_const_speed = {'start': np.array([0, 0, 30]),
-                                      'end': np.array([200, 200, 30]),
-                                      'speeds': np.array([30, 30])}
+        large_distance_const_speed = {
+            'large_distance_const_speed': {
+                'start': np.array([0, 0, 30]),
+                'end': np.array([200, 200, 30]),
+                'speeds': np.array([30, 30])
+            }
+        }
 
-        large_distance_accel = {'start': np.array([-200, 0, 30]),
-                                'end': np.array([100, 50, 30]),
-                                'speeds': np.array([20, 30])}
+        large_distance_accel = {
+            'large_distance_accel': {
+                'start': np.array([-200, 0, 30]),
+                'end': np.array([100, 50, 30]),
+                'speeds': np.array([20, 30])
+            }
+        }
 
-        large_distance_decel = {'start': np.array([-200, 0, 30]),
-                                'end': np.array([100, 50, 30]),
-                                'speeds': np.array([30, 20])}
+        large_distance_decel = {
+            'large_distance_decel': {
+                'start': np.array([-200, 0, 30]),
+                'end': np.array([100, 50, 30]),
+                'speeds': np.array([30, 20])
+            }
+        }
 
-        fast_traj = utils.vector_t(fast_accel).T
-        slow_traj = utils.vector_t(slow_accel).T
-        long_dist_const_traj = utils.vector_t(large_distance_const_speed).T
-        long_accel_traj = utils.vector_t(large_distance_accel).T
-        long_decel_traj = utils.vector_t(large_distance_decel).T
+        fast_traj = FlightPath(fast_accel)(48000).T
+        slow_traj = FlightPath(slow_accel)(48000).T
+        long_dist_const_traj = FlightPath(large_distance_const_speed)(48000).T
+        long_accel_traj = FlightPath(large_distance_accel)(48000).T
+        long_decel_traj = FlightPath(large_distance_decel)(48000).T
 
         # lower acceleration should result in longer trajectories
         self.assertGreater(len(slow_traj), len(fast_traj))

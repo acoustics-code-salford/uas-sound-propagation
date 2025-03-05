@@ -139,7 +139,7 @@ class UASEventRenderer():
 
     @flight_parameters.setter
     def flight_parameters(self, params):
-        self._flightpath = FlightPath(params, fs=self.fs)
+        self._flightpath = FlightPath(params)
         self._setup_paths()
         self._flight_parameters = params
 
@@ -437,12 +437,9 @@ class AtmosphericAbsorptionFilter():
 
 
 class FlightPath():
-    def __init__(self,
-                 flight_spec,
-                 fs=50):
+    def __init__(self,flight_spec):
 
         self.flight_spec = flight_spec
-        self.fs = fs
 
     def __call__(self,
                  fs=50,
