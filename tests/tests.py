@@ -50,25 +50,25 @@ class TestInterpolators(unittest.TestCase):
 
 class TestTrajectoryCalc(unittest.TestCase):
     def test_trajectory(self):
-        fast_accel = {'start': array([ 0,  0, 30]),
-                      'end': array([20,  0, 30]),
-                      'speeds': array([ 0, 10])}
+        fast_accel = {'start': np.array([0,  0, 30]),
+                      'end': np.array([20,  0, 30]),
+                      'speeds': np.array([0, 10])}
 
-        slow_accel = {'start': array([ 0,  0, 30]),
-                      'end': array([20,  0, 30]),
-                      'speeds': array([0, 5])}
+        slow_accel = {'start': np.array([0,  0, 30]),
+                      'end': np.array([20,  0, 30]),
+                      'speeds': np.array([0, 5])}
 
-        large_distance_const_speed = {'start': array([ 0, 0, 30]),
-                                      'end': array([200, 200, 30]),
-                                      'speeds': array([30, 30])}
+        large_distance_const_speed = {'start': np.array([0, 0, 30]),
+                                      'end': np.array([200, 200, 30]),
+                                      'speeds': np.array([30, 30])}
 
-        large_distance_accel = {'start': array([-200, 0, 30]),
-                                'end': array([100, 50, 30]),
-                                'speeds': array([20, 30])}
+        large_distance_accel = {'start': np.array([-200, 0, 30]),
+                                'end': np.array([100, 50, 30]),
+                                'speeds': np.array([20, 30])}
 
-        large_distance_decel = {'start': array([-200, 0, 30]),
-                                'end': array([100, 50, 30]),
-                                'speeds': array([30, 20])}
+        large_distance_decel = {'start': np.array([-200, 0, 30]),
+                                'end': np.array([100, 50, 30]),
+                                'speeds': np.array([30, 20])}
 
         fast_traj = utils.vector_t(fast_accel).T
         slow_traj = utils.vector_t(slow_accel).T
