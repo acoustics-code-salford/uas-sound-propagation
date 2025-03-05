@@ -140,7 +140,7 @@ class UASEventRenderer():
 
     @flight_spec.setter
     def flight_spec(self, params):
-
+        self._flightpath = FlightPath(params, fs=self.fs)
         self._setup_paths()
         self._flight_spec = params
 
