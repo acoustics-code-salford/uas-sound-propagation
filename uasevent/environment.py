@@ -27,7 +27,9 @@ class UASEventRenderer():
         '''Height of receiver position, metres (default 1.5)'''
         self.ground_material = ground_material
         '''Material for ground reflection'''
-        self.flight_parameters = json.load(open(flight_spec))
+
+        self.flight_parameters = flight_parameters
+
         '''JSON file with segmentwise description of flight path'''
         self.output = None
         '''Initialise var to contain rendered signal'''
@@ -139,7 +141,7 @@ class UASEventRenderer():
 
     @flight_parameters.setter
     def flight_parameters(self, params):
-        self._flightpath = FlightPath(params, fs=self.fs)
+
         self._setup_paths()
         self._flight_parameters = params
 
@@ -283,6 +285,7 @@ class PropagationPath():
             self._filter, 
             self._apply_attenuation
         )
+
         return output
 
 
@@ -434,7 +437,6 @@ class AtmosphericAbsorptionFilter():
                          self._attenuation**r,
                          fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
-
 
 class FlightPath():
     def __init__(self, 
