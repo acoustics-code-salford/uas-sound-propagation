@@ -25,7 +25,7 @@ class UASEventRenderer():
         '''Height of receiver position, metres (default 1.5)'''
         self.ground_material = ground_material
         '''Material for ground reflection'''
-        self.flight_parameters = flight_parameters #json.load(open(flight_parameters))
+        self.flight_parameters = flight_parameters
         '''JSON file with segmentwise description of flight path'''
 
     def render(self, x):
@@ -106,7 +106,7 @@ class UASEventRenderer():
         self.params_file = params
 
         params = json.load(open(params))
-        
+
         self._flightpath = np.empty([3, 0])
 
         for _, p in params.items():
@@ -200,7 +200,7 @@ class PropagationPath():
         return out
 
     def _apply_attenuation(self, x):
-        return x #* self._inv_sqr_attn
+        return x * self._inv_sqr_attn
 
     def _filter(self, x):
         # neat trick to get windowed frames
@@ -249,13 +249,10 @@ class PropagationPath():
         if len(x) < len(self._delta_delays + 1):
             raise ValueError('Input signal shorter than path to be rendered')
 
-        # output = \
-        #     self._apply_attenuation(
-        #             self._filter(
-        #                 self._apply_doppler(x)
-        #             )
-        #         )
-        output = pipe(x, self._apply_doppler, self._filter, self._apply_attenuation)
+        output = pipe(x,
+                      self._apply_doppler,
+                      self._filter,
+                      self._apply_attenuation)
         return output
 
 
@@ -407,4 +404,3 @@ class AtmosphericAbsorptionFilter():
                          self._attenuation**r,
                          fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
-
