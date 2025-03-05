@@ -77,9 +77,6 @@ class UASEventRenderer():
             reflection = reflection_zeros
         self._d = direct.T
         self._r = reflection.T
-        output = direct.T + reflection.T
-
-        self.output = output
 
     def write_output(self, filename, output='combined'):
 
@@ -88,7 +85,7 @@ class UASEventRenderer():
             raise ValueError('No output signal to write out')
 
         if output == 'combined':
-            self._write_outfiles(filename, self.output)
+            self._write_outfiles(filename, self._d + self._r)
         elif output == 'direct':
             self._write_outfiles(f'{filename}_direct',
                                  self._d, path_type='direct')

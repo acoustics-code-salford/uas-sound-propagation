@@ -123,8 +123,7 @@ class TestRender(unittest.TestCase):
         self.x, fs = sf.read('tests/testsrc.wav')
         params = 'tests/test_flight.json'
         self.renderer = UASEventRenderer(params, 'asphalt', fs, 1.5)
-        self.xout = self.renderer.render(self.x)
-        self.dir_x = self.renderer._d
+        self.renderer.render(self.x)
 
         params_2 = 'tests/test_flight_2.json'
         self.renderer_2 = UASEventRenderer(params_2, 'asphalt', fs, 1.5)
@@ -133,7 +132,7 @@ class TestRender(unittest.TestCase):
         # rendering should equal length of calculated trajectory
         self.assertEqual(
             len(self.renderer._flightpath(48000).T),
-            len(self.xout))
+            len(self.renderer._d + self.renderer._r))
 
         # direct path should have higher power than reflection
         self.assertGreater(np.sum(abs(self.renderer._d)),
