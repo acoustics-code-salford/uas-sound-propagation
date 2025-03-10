@@ -67,7 +67,7 @@ class UASEventRenderer():
             proc.join()
 
         direct = return_dict['0']
-        reflection = return_list['1']
+        reflection = return_dict['1']
 
         # in samples
         offset = (self.ground_reflection._init_delay
