@@ -54,20 +54,20 @@ class UASEventRenderer():
         # apply each propagation path to input signal (parallel)
         pathlist = [self.direct_path, self.ground_reflection]
         manager = multiprocessing.Manager()
-        return_dict = manager.dict()
+        self.return_dict = manager.dict()
         jobs = []
         for i, path in enumerate(pathlist):
             p = multiprocessing.Process(
                 target=self.worker,
-                args=(path, x, return_dict, str(i)))
+                args=(path, x, str(i)))
             jobs.append(p)
             p.start()
 
         for proc in jobs:
             proc.join()
 
-        direct = return_dict['0']
-        reflection = return_dict['1']
+        direct = self.return_dict['0']
+        reflection = self.return_dict['1']
 
         # in samples
         offset = (self.ground_reflection._init_delay
@@ -180,12 +180,13 @@ class UASEventRenderer():
         self.direct_path._inv_sqr_attn /= self._norm_scaling
         self.ground_reflection._inv_sqr_attn /= self._norm_scaling
 
-    def worker(self, object, x, return_dict, key):
+    def worker(self, object, x, key):
         '''
         Basic framework for parallel processes
         '''
+        print(key)
         path_output = object.process(x)
-        return_dict[key] = path_output
+        self.return_dict[key] = path_output
 
 
 class PropagationPath():
