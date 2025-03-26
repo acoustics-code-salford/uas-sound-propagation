@@ -1,5 +1,6 @@
 import os
 import json
+import warnings
 import numpy as np
 import soundfile as sf
 import multiprocessing
@@ -16,8 +17,8 @@ class UASEventRenderer():
     def __init__(
             self,
             flight_spec,
-            ground_material='grass',
             fs=48_000,
+            ground_material='grass',
             receiver_height=1.5):
         '''
         Initialises all necessary attributes for the UASEventRenderer object.
@@ -65,7 +66,6 @@ class UASEventRenderer():
 
         for proc in jobs:
             proc.join()
-            print(f'Process {proc} finished')
 
         direct = self.return_dict['0']
         reflection = self.return_dict['1']
@@ -185,9 +185,7 @@ class UASEventRenderer():
         '''
         Basic framework for parallel processes
         '''
-        print(f'Process {key} started')
         path_output = prop_path.process(x)
-        print(f'Process {key} finished')
         self.return_dict[key] = path_output
 
 
@@ -296,8 +294,12 @@ class PropagationPath():
         `output`
             Array containing signal reaching receiver along specified path.
         '''
-        if len(x) < len(self._delta_delays + 1):
-            raise ValueError('Input signal shorter than path to be rendered')
+        path_len = len(self.flightpath[0]) + 2
+        if len(x) <= path_len:
+            n_reps = int(np.ceil((path_len) / len(x)))
+            warnings.warn(f'Input signal shorter than path, '
+                          f'auto-repeating input x {n_reps}...')
+            x = np.tile(x, n_reps)
 
         output = pipe(
             x,
