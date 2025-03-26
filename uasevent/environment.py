@@ -65,6 +65,7 @@ class UASEventRenderer():
 
         for proc in jobs:
             proc.join()
+            print(f'Process {proc} finished')
 
         direct = self.return_dict['0']
         reflection = self.return_dict['1']
@@ -180,12 +181,13 @@ class UASEventRenderer():
         self.direct_path._inv_sqr_attn /= self._norm_scaling
         self.ground_reflection._inv_sqr_attn /= self._norm_scaling
 
-    def worker(self, object, x, key):
+    def worker(self, prop_path, x, key):
         '''
         Basic framework for parallel processes
         '''
-        print(key)
-        path_output = object.process(x)
+        print(f'Process {key} started')
+        path_output = prop_path.process(x)
+        print(f'Process {key} finished')
         self.return_dict[key] = path_output
 
 
