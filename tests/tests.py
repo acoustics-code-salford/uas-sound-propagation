@@ -122,11 +122,11 @@ class TestRender(unittest.TestCase):
 
         self.x, fs = sf.read('tests/testsrc.wav')
         params = 'tests/test_flight.json'
-        self.renderer = UASEventRenderer(params, 'asphalt', fs, 1.5)
+        self.renderer = UASEventRenderer(params, fs, 'asphalt', 1.5)
         self.renderer.render(self.x)
 
         params_2 = 'tests/test_flight_2.json'
-        self.renderer_2 = UASEventRenderer(params_2, 'asphalt', fs, 1.5)
+        self.renderer_2 = UASEventRenderer(params_2, fs, 'asphalt', 1.5)
 
     def test_output_sensible(self):
         # rendering should equal length of calculated trajectory
