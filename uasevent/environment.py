@@ -34,7 +34,53 @@ class UASEventRenderer():
         self.output = None
         '''Initialise var to contain rendered signal'''
 
-    def render(self, x, direct=True, reflection=True):
+    @property
+    def receiver_height(self):
+        return self._receiver_height
+
+    @receiver_height.setter
+    def receiver_height(self, height):
+        self._receiver_height = height
+        if hasattr(self, 'flight_parameters'):
+            self._setup_paths()
+
+    @property
+    def ground_material(self):
+        return self._ground_material
+
+    @ground_material.setter
+    def ground_material(self, material):
+        self._ground_material = material
+        if hasattr(self, 'flight_parameters'):
+            self._setup_paths()
+
+    @property
+    def flight_parameters(self):
+        return self._flight_parameters
+
+    @flight_parameters.setter
+    def flight_parameters(self, params):
+        self._flight_parameters = params
+        self._setup_paths()
+
+    def _setup_paths(self):
+        # set up direct and reflected paths
+        self.direct_path = PropagationPath(
+            FlightPath(self._flight_parameters),
+            'direct', self.receiver_height, self.fs
+        )
+
+        self.ground_reflection = PropagationPath(
+            FlightPath(self._flight_parameters),
+            'reflection', self.receiver_height, self.fs,
+            self.ground_material
+        )
+
+        self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
+        self.direct_path._inv_sqr_attn /= self._norm_scaling
+        self.ground_reflection._inv_sqr_attn /= self._norm_scaling
+
+    def render(self, x):
         '''
         Renders output signal based on input parameters.
 
@@ -126,61 +172,6 @@ class UASEventRenderer():
             header=f't={start_t}, fmt={coord_fmt}, path={path_type}'
         )
 
-    @property
-    def receiver_height(self):
-        return self._receiver_height
-
-    @receiver_height.setter
-    def receiver_height(self, height):
-        self._receiver_height = height
-        if hasattr(self, 'flight_parameters'):
-            self._setup_paths()
-
-    @property
-    def ground_material(self):
-        return self._ground_material
-
-    @ground_material.setter
-    def ground_material(self, material):
-        self._ground_material = material
-        if hasattr(self, 'flight_parameters'):
-            self._setup_paths()
-
-    @property
-    def flight_parameters(self):
-        return self._flight_parameters
-
-    @flight_parameters.setter
-    def flight_parameters(self, params):
-        self._flightpath = FlightPath(params)
-        self._setup_paths()
-        self._flight_parameters = params
-
-    def _setup_paths(self):
-        # set up direct and reflected paths
-        self.direct_path = PropagationPath(
-            self._flightpath(
-                receiver_height=self.receiver_height,
-                path_type='direct',
-                fs=self.fs
-            ),
-            self.fs
-        )
-
-        self.ground_reflection = PropagationPath(
-            self._flightpath(
-                receiver_height=self.receiver_height,
-                path_type='reflection',
-                fs=self.fs
-            ),
-            self.fs,
-            self.ground_material
-        )
-
-        self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
-        self.direct_path._inv_sqr_attn /= self._norm_scaling
-        self.ground_reflection._inv_sqr_attn /= self._norm_scaling
-
     def worker(self, prop_path, x, key):
         '''
         Basic framework for parallel processes
@@ -197,6 +188,8 @@ class PropagationPath():
     def __init__(
             self,
             flightpath,
+            path_type,
+            receiver_height=1.5,
             fs=48_000,
             reflection_surface=None,
             atmos=True,
@@ -218,10 +211,16 @@ class PropagationPath():
         self._hop_len = frame_len // 2
         '''Number of samples to hop between frames.'''
         self.flightpath = flightpath
+        '''FlightPath object for array calculations'''
+        self.path_array = self.flightpath(
+                receiver_height=receiver_height,
+                path_type=path_type,
+                fs=self.fs
+            )
         '''Array describing position of source at every sample point.'''
 
         # calculate delays and amplitude curve
-        _, _, r = utils.cart_to_sph(flightpath)
+        _, _, r = utils.cart_to_sph(self.path_array)
         delays = (r / c) * self.fs
         self._init_delay = delays[0]
         self._delta_delays = np.diff(delays)
@@ -229,8 +228,7 @@ class PropagationPath():
 
         # calculate angles per frame for filters
         self._sph_per_frame = utils.cart_to_sph(
-            np.lib.stride_tricks.sliding_window_view(
-                flightpath, self.frame_len, 1)[:, ::self._hop_len].mean(2)
+            self.flightpath(fs=self.fs / self._hop_len)
         ).T
 
     def _apply_doppler(self, x):
@@ -297,7 +295,7 @@ class PropagationPath():
         `output`
             Array containing signal reaching receiver along specified path.
         '''
-        path_len = len(self.flightpath[0]) + 2
+        path_len = len(self.path_array[0]) + 2
         if len(x) <= path_len:
             n_reps = int(np.ceil((path_len) / len(x)))
             warnings.warn(f'Input signal shorter than path, '

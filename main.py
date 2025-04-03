@@ -202,7 +202,8 @@ class MainWindow(QMainWindow):
         # TODO: simpler way to calculate this without having to calculate the 
         # whole flightpath every time - flightpath should only be calculated
         # when pressing the 'render' button, as it does take a short while
-        pathtime_seconds = len(self.renderer.direct_path.flightpath()) / self.renderer.fs
+        pathtime_seconds = len(
+            self.renderer.direct_path.path_array.T) / self.renderer.fs
         self.pathlen_label.setText(f'{pathtime_seconds:.1f} s')
 
     def setup_flightpath_table(self):
