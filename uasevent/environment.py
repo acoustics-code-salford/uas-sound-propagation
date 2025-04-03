@@ -6,7 +6,7 @@ import soundfile as sf
 import multiprocessing
 from toolz import pipe
 from scipy import signal
-import interpolators, utils
+from . import interpolators, utils
 
 
 class UASEventRenderer():
@@ -199,6 +199,7 @@ class PropagationPath():
             flightpath,
             fs=48_000,
             reflection_surface=None,
+            atmos=True,
             c=343.0,
             frame_len=512
     ):

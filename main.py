@@ -4,8 +4,6 @@ import json
 import numpy as np
 import soundfile as sf
 
-from utils import load_params
-
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QAction, QDoubleValidator
 from PyQt6.QtWidgets import (
@@ -27,14 +25,14 @@ from PyQt6.QtWidgets import (
 from pathlib import Path
 root_path = str(Path(__file__).parent.parent)
 
-from environment import UASEventRenderer
+from uasevent.environment import UASEventRenderer
 
 
 class MainWindow(QMainWindow):
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self.renderer = UASEventRenderer()
+        self.renderer = UASEventRenderer('flights/demo_flight.json')
 
         self.setWindowTitle('UAV Sound Propagation')
         layout = QGridLayout()
@@ -72,13 +70,6 @@ class MainWindow(QMainWindow):
         self.material_dropdown.currentIndexChanged.connect(
             self.ground_material_changed)
 
-        # loudspeaker mapping dropdown
-        mapping_names = list(json.load(open('mappings/mappings.json')).keys())
-        self.mapping_dropdown = QComboBox()
-        self.mapping_dropdown.addItems(mapping_names)
-        self.mapping_dropdown.setCurrentIndex(1)
-        self.mapping_dropdown.currentIndexChanged.connect(self.mapping_changed)
-
         # labels
         self.filepath_label = QLabel('')
         self.sourcelen_label = QLabel('')
@@ -91,7 +82,6 @@ class MainWindow(QMainWindow):
         form.addRow('Ground Reflection', self.reflection_checkbox)
         form.addRow('Atmospheric Absorption', self.atmos_checkbox)
         form.addRow('Ground Material', self.material_dropdown)
-        form.addRow('Loudspeaker Mapping', self.mapping_dropdown)
         form.addRow('Source File:', self.filepath_label)
         form.addRow('Source Length:', self.sourcelen_label)
         form.addRow('Path Length:', self.pathlen_label)
@@ -167,10 +157,6 @@ class MainWindow(QMainWindow):
             self.renderer.atmos = True
         else:
             self.renderer.atmos = False
-
-    def mapping_changed(self, index):
-        self.renderer.loudspeaker_mapping = \
-            self.mapping_dropdown.itemText(index)
         
     def ground_material_changed(self, index):
         self.renderer.ground_material = self.material_dropdown.itemText(index)
@@ -190,7 +176,7 @@ class MainWindow(QMainWindow):
         # allow single file only
         dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
         # set accepted formats
-        dialog.setNameFilter('(*.csv)')
+        dialog.setNameFilter('(*.json)')
         dialog.exec()
         filepath = dialog.selectedFiles()
 
@@ -198,25 +184,25 @@ class MainWindow(QMainWindow):
             return False
         filepath = filepath[0]
 
-        table_params = np.loadtxt(
-            filepath,
-            delimiter=',',
-            skiprows=1,
-            usecols=np.arange(0, 4),
-            dtype='str'
-        ).reshape(-1, 4)
-        
-        renderer_params = load_params(filepath)
+        self.renderer.flight_parameters = json.load(open(filepath))
+
+        table_params = []
+        for k, v in self.renderer.flight_parameters.items():
+            sublist = []
+            sublist.append(k)
+            for l, b in v.items():
+                str_list = ' '.join(map(str, b))
+                sublist.append(str_list)
+            table_params.append(sublist)
+        table_params = np.array(table_params)
         
         self.set_flightpath_table_vals(table_params)
-        self.renderer.flight_parameters = renderer_params
 
-        # TODO: json-based flightpath file format (simplify)
         
         # TODO: simpler way to calculate this without having to calculate the 
         # whole flightpath every time - flightpath should only be calculated
         # when pressing the 'render' button, as it does take a short while
-        pathtime_seconds = len(self.renderer._flightpath.T) / self.renderer.fs
+        pathtime_seconds = len(self.renderer.direct_path.flightpath()) / self.renderer.fs
         self.pathlen_label.setText(f'{pathtime_seconds:.1f} s')
 
     def setup_flightpath_table(self):
