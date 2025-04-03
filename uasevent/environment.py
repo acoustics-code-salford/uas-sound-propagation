@@ -226,8 +226,7 @@ class PropagationPath():
 
         # calculate angles per frame for filters
         self._sph_per_frame = utils.cart_to_sph(
-            np.lib.stride_tricks.sliding_window_view(
-                self.path_array, self.frame_len, 1)[:, ::self._hop_len].mean(2)
+            self.flightpath(fs=self.fs / self._hop_len)
         ).T
 
     def _apply_doppler(self, x):
