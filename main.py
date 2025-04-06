@@ -93,12 +93,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.flightpath_table, 1, 0, 1, 2)
 
         # table control buttons
-        self.add_button = QPushButton('+')
-        self.add_button.setMaximumWidth(30)
-        layout.addWidget(self.add_button, 2, 0)
-        self.remove_button = QPushButton('-')
-        self.remove_button.setMaximumWidth(30)
-        layout.addWidget(self.remove_button, 2, 1)
+        self.addseg_button = QPushButton('+')
+        self.addseg_button.setMaximumWidth(30)
+        layout.addWidget(self.addseg_button, 2, 0)
+        self.removeseg_button = QPushButton('-')
+        self.removeseg_button.setMaximumWidth(30)
+        layout.addWidget(self.removeseg_button, 2, 1)
 
         self.render_button = QPushButton('Render')
         layout.addWidget(self.render_button, 3, 0, 1, 2)
@@ -198,10 +198,6 @@ class MainWindow(QMainWindow):
         
         self.set_flightpath_table_vals(table_params)
 
-        
-        # TODO: simpler way to calculate this without having to calculate the 
-        # whole flightpath every time - flightpath should only be calculated
-        # when pressing the 'render' button, as it does take a short while
         pathtime_seconds = len(
             self.renderer.direct_path.path_array.T) / self.renderer.fs
         self.pathlen_label.setText(f'{pathtime_seconds:.1f} s')
