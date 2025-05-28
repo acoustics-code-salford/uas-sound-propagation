@@ -6,7 +6,8 @@ import soundfile as sf
 import multiprocessing
 from toolz import pipe
 from scipy import signal
-from . import interpolators, utils
+from scipy.interpolate import RegularGridInterpolator
+from . import interpolators, utils, pyoctaveband
 
 
 class UASEventRenderer():
@@ -191,7 +192,9 @@ class PropagationPath():
             path_type,
             receiver_height=1.5,
             fs=48_000,
+            atmos_absorp=True,
             reflection_surface=None,
+            directivity_directory=None,
             c=343.0,
             frame_len=512
     ):
@@ -216,6 +219,7 @@ class PropagationPath():
                 fs=self.fs
             )
         '''Array describing position of source at every sample point.'''
+        self.atmos_absorp = atmos_absorp
 
         # calculate delays and amplitude curve
         _, _, r = utils.cart_to_sph(self.path_array)
@@ -256,8 +260,13 @@ class PropagationPath():
         # list of filter stages
         filters = []
 
-        # add atmospheric absorption
-        filters.append(AtmosphericAbsorptionFilter())
+        # add atmospheric absorption if enabled
+        if self.atmos_absorp:
+            filters.append(AtmosphericAbsorptionFilter())
+
+        # add directivity if hemisphere data is specified
+        if self.directivity_directory is not None:
+            filters.append(DirectivityFilter(self.directivity_directory))
 
         # add ground filter if surface is set (reflected path)
         if self.reflection_surface is not None:
@@ -394,7 +403,7 @@ class AtmosphericAbsorptionFilter():
     atmospheric absorption.
     '''
     def __init__(self,
-                 freqs=np.geomspace(20, 24000),
+                 freqs=np.geomspace(20, 24_000),
                  temp=20.0,
                  humidity=80.0,
                  pressure=101.325,
@@ -456,6 +465,45 @@ class AtmosphericAbsorptionFilter():
                          self._attenuation**r,
                          fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
+
+
+class DirectivityFilter():
+
+    def __init__(self, directory, fs=48_000):
+        self._thetas = np.loadtxt(
+            f'{directory}/thetas.csv', delimiter=',')
+        self._phis = np.loadtxt(
+            f'{directory}/thetas.csv', delimiter=',')
+        self._freqs = np.loadtxt(
+            f'{directory}/freqs.csv', delimiter=',')
+        self.linear_directionality = \
+            10**(np.load(f'{directory}/db_diffs.npy')/10)
+
+        self.grid_interpolator = RegularGridInterpolator(
+            (phis, thetas), self.linear_directionality, bounds_error=False)
+
+    def clamped_interp(self, theta, phi):
+        clamped_phi = np.clip(phi, self._phis[0], self._phis[-1])
+        clamped_theta = np.clip(theta, self._thetas[0], self._thetas[-1])
+        return self.grid_interpolator((clamped_phi, clamped_theta))
+
+    def filter(self, x, position):
+        theta, phi, _ = position
+        _, _, bands = pyoctaveband.octavefilter(x, fs,
+            fraction=3, order=5, show=0, sigbands=1,
+            limits=[self._freqs[0], self._freqs[-1]])
+
+        # padding and trimming for uneven band lengths
+        for i in range(len(bands)):
+            if len(bands[i]) < len(x):
+                bands[i] = np.concatenate(
+                    (bands[i], np.zeros(len(x) - len(bands[i]))))
+            else:
+                bands[i] = bands[i][:len(x)]
+        bands = np.array(bands).T
+        attn = bands * self.clamped_interp(theta, phi)
+
+        return attn.sum(1)
 
 
 class FlightPath():
