@@ -1,13 +1,16 @@
 import os
 import json
+import pyfar
 import warnings
 import numpy as np
 import soundfile as sf
 import multiprocessing
-from toolz import pipe
+
 from scipy import signal
+from scipy.ndimage import gaussian_filter
+from pyfar.dsp.filter import fractional_octave_bands
 from scipy.interpolate import RegularGridInterpolator
-from . import interpolators, utils, pyoctaveband
+from . import interpolators, utils
 
 
 class UASEventRenderer():
@@ -20,10 +23,12 @@ class UASEventRenderer():
             flight_spec,
             fs=48_000,
             ground_material='grass',
+            atmos_absorp=True,
             receiver_height=1.5):
         '''
         Initialises all necessary attributes for the UASEventRenderer object.
         '''
+        self.atmos_absorp = atmos_absorp
         self.fs = fs
         '''Sampling frequency in Hz (default 48_000)'''
         self.receiver_height = receiver_height
@@ -68,20 +73,22 @@ class UASEventRenderer():
         # set up direct and reflected paths
         self.direct_path = PropagationPath(
             FlightPath(self._flight_parameters),
-            'direct', self.receiver_height, self.fs
+            'direct', self.receiver_height, self.fs,
+            atmos_absorp=self.atmos_absorp
         )
 
         self.ground_reflection = PropagationPath(
             FlightPath(self._flight_parameters),
             'reflection', self.receiver_height, self.fs,
-            self.ground_material
+            reflection_surface=self.ground_material,
+            atmos_absorp=self.atmos_absorp
         )
 
         self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
         self.direct_path._inv_sqr_attn /= self._norm_scaling
         self.ground_reflection._inv_sqr_attn /= self._norm_scaling
 
-    def render(self, x):
+    def render(self, x, directivity_dir=None):
         '''
         Renders output signal based on input parameters.
 
@@ -107,7 +114,7 @@ class UASEventRenderer():
         for i, path in enumerate(pathlist):
             p = multiprocessing.Process(
                 target=self.worker,
-                args=(path, x, str(i)))
+                args=(path, x, directivity_dir, str(i)))
             jobs.append(p)
             p.start()
 
@@ -173,11 +180,11 @@ class UASEventRenderer():
             header=f't={start_t}, fmt={coord_fmt}, path={path_type}'
         )
 
-    def worker(self, prop_path, x, key):
+    def worker(self, prop_path, x, directivity_dir, key):
         '''
         Basic framework for parallel processes
         '''
-        path_output = prop_path.process(x)
+        path_output = prop_path.process(x, directivity_dir)
         self.return_dict[key] = path_output
 
 
@@ -192,9 +199,8 @@ class PropagationPath():
             path_type,
             receiver_height=1.5,
             fs=48_000,
-            atmos_absorp=True,
             reflection_surface=None,
-            directivity_directory=None,
+            atmos_absorp=True,
             c=343.0,
             frame_len=512
     ):
@@ -219,6 +225,7 @@ class PropagationPath():
                 fs=self.fs
             )
         '''Array describing position of source at every sample point.'''
+        
         self.atmos_absorp = atmos_absorp
 
         # calculate delays and amplitude curve
@@ -229,9 +236,9 @@ class PropagationPath():
         self._inv_sqr_attn = 1 / r**2
 
         # calculate angles per frame for filters
-        self._sph_per_frame = utils.cart_to_sph(
-            self.flightpath(fs=self.fs / self._hop_len)
-        ).T
+        # self._sph_per_frame = utils.cart_to_sph(
+        #     self.flightpath(fs=self.fs / self._hop_len)
+        # ).T
 
     def _apply_doppler(self, x):
         # init output array and initial read position
@@ -252,7 +259,7 @@ class PropagationPath():
     def _apply_attenuation(self, x):
         return x * self._inv_sqr_attn
 
-    def _filter(self, x):
+    def _filter(self, x, directivity_directory=None):
         # neat trick to get windowed frames
         x_windowed = np.lib.stride_tricks.sliding_window_view(
             x, self.frame_len)[::self._hop_len] * np.hanning(self.frame_len)
@@ -262,20 +269,21 @@ class PropagationPath():
 
         # add atmospheric absorption if enabled
         if self.atmos_absorp:
-            filters.append(AtmosphericAbsorptionFilter())
+            filters.append(AtmosphericAbsorptionFilter(fs=self.fs))
 
-        # add directivity if hemisphere data is specified
-        if self.directivity_directory is not None:
-            filters.append(DirectivityFilter(self.directivity_directory))
+        # # add directivity if hemisphere data is specified
+        # if directivity_directory is not None:
+        #     filters.append(DirectivityFilter(directivity_directory, fs=self.fs))
 
         # add ground filter if surface is set (reflected path)
         if self.reflection_surface is not None:
-            filters.append(GroundReflectionFilter(self.reflection_surface))
+            filters.append(GroundReflectionFilter(
+                self.reflection_surface, fs=self.fs))
 
         x_out = np.zeros(len(x))
 
         for i, (position, frame) in enumerate(
-                zip(self._sph_per_frame, x_windowed)):
+                zip(self.flightpath(fs=self.fs / self._hop_len).T, x_windowed)):
 
             for filter in filters:
                 frame = filter.filter(frame, position)
@@ -283,9 +291,14 @@ class PropagationPath():
             frame_index = i * self._hop_len
             x_out[frame_index:frame_index + self.frame_len] += frame
 
+        if directivity_directory is not None:
+            directivity = DirectivityFilter(
+                directivity_directory, fs=self.fs)
+            x_out = directivity.filter(x_out, self.flightpath(fs=self.fs))
+
         return x_out
 
-    def process(self, x):
+    def process(self, x, directivity_directory=None):
         '''
         Processes input signal to add effects of propagation along single
         specified path. Incorporates amplitude envelopes, doppler effect,
@@ -308,12 +321,9 @@ class PropagationPath():
                           f'auto-repeating input x {n_reps}...')
             x = np.tile(x, n_reps)
 
-        output = pipe(
-            x,
-            self._apply_doppler,
-            self._filter,
-            self._apply_attenuation
-        )
+        output = self._apply_doppler(x)
+        output = self._filter(output, directivity_directory)
+        output = self._apply_attenuation(output)
         return output
 
 
@@ -388,6 +398,7 @@ class GroundReflectionFilter():
         `lowpass_sig`:
             Filtered signal.
         '''
+        position = utils.cart_to_sph(position)
         _, phi, _ = position
         phi = np.pi - phi
         h = signal.firls(self.n_taps, self.freqs,
@@ -460,6 +471,7 @@ class AtmosphericAbsorptionFilter():
         return 1 - alpha
 
     def filter(self, x, position):
+        position = utils.cart_to_sph(position)
         _, _, r = position
         h = signal.firls(self.n_taps, self.freqs,
                          self._attenuation**r,
@@ -469,41 +481,46 @@ class AtmosphericAbsorptionFilter():
 
 class DirectivityFilter():
 
-    def __init__(self, directory, fs=48_000):
+    def __init__(self,
+        data_directory,
+        fs=48_000):
+
+        self.fs=fs
+
         self._thetas = np.loadtxt(
-            f'{directory}/thetas.csv', delimiter=',')
+            f'{data_directory}/thetas.csv', delimiter=',')
         self._phis = np.loadtxt(
-            f'{directory}/thetas.csv', delimiter=',')
-        self._freqs = np.loadtxt(
-            f'{directory}/freqs.csv', delimiter=',')
-        self.linear_directionality = \
-            10**(np.load(f'{directory}/db_diffs.npy')/10)
+            f'{data_directory}/phis.csv', delimiter=',')
 
+        # load raw data
+        directionality_db = np.load(f'{data_directory}/db_diffs.npy')
+        # smooth attenuation grids to avoid audible discontinuities in output
+        smooth_atten = gaussian_filter(directionality_db, sigma=1)
+
+        # interpolation object to return gain values
         self.grid_interpolator = RegularGridInterpolator(
-            (phis, thetas), self.linear_directionality, bounds_error=False)
+            (self._phis, self._thetas), smooth_atten, bounds_error=False)
 
-    def clamped_interp(self, theta, phi):
+    def clamped_interp(self, point):
+        theta, phi = point
         clamped_phi = np.clip(phi, self._phis[0], self._phis[-1])
         clamped_theta = np.clip(theta, self._thetas[0], self._thetas[-1])
         return self.grid_interpolator((clamped_phi, clamped_theta))
 
-    def filter(self, x, position):
-        theta, phi, _ = position
-        _, _, bands = pyoctaveband.octavefilter(x, fs,
-            fraction=3, order=5, show=0, sigbands=1,
-            limits=[self._freqs[0], self._freqs[-1]])
+    def filter(self, x, flightpath):
+        # filter into third-octave bands
+        xfilt = pyfar.dsp.filter.fractional_octave_bands(
+            pyfar.Signal(x, self.fs), 3, frequency_range=(19, 20e3))
 
-        # padding and trimming for uneven band lengths
-        for i in range(len(bands)):
-            if len(bands[i]) < len(x):
-                bands[i] = np.concatenate(
-                    (bands[i], np.zeros(len(x) - len(bands[i]))))
-            else:
-                bands[i] = bands[i][:len(x)]
-        bands = np.array(bands).T
-        attn = bands * self.clamped_interp(theta, phi)
+        # need to consider how to change this to reorient in the direction of
+        # travel for the drone (e.g. phi is front/back angle **relative to the
+        # forward orientation of the drone**, theta is side to side)
+        theta = np.rad2deg(np.arctan(flightpath[0] / flightpath[2]))
+        phi = np.rad2deg(np.arctan(flightpath[1] / flightpath[2]))
 
-        return attn.sum(1)
+        frequency_weighted_sig = \
+            xfilt.time.squeeze() * self.clamped_interp((theta, phi)).T
+        return frequency_weighted_sig.sum(0)
 
 
 class FlightPath():
