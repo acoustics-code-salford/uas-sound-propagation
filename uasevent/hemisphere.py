@@ -1,6 +1,6 @@
 import glob
 import numpy as np
-from scipy import io
+from scipy import io, signal
 from . import pyoctaveband
 
 
@@ -43,8 +43,8 @@ def atmospheric_absorption(freqs, temp=20, humidity=80, pressure=101.325):
 
 
 def get_data_from_mat(
-        mat_filename, 
-        n_mics=9, 
+        mat_filename,
+        n_mics=9,
         metrics=['LAFp'],
         ground_plate_compensation=True
 ):
@@ -74,9 +74,9 @@ def get_data_from_mat(
             - fs (int): Sampling rate of the recordings.
     """
     # loading of multiple files
-    if type(mat_filename) == list:
-        fm = [get_data_from_mat(file, metrics=metrics) 
-                for file in mat_filename]
+    if isinstance(mat_filename, list):
+        fm = [
+            get_data_from_mat(file, metrics=metrics) for file in mat_filename]
         data_raw = np.array([f[0] for f in fm])
         data_metrics = [f[1] for f in fm]
         fs = int(fm[0][2])
@@ -108,15 +108,15 @@ def multi_psd(raw_data, fs, n_fft, win='hann'):
 
     n_reps = raw_data.shape[0]
     n_channels = raw_data.shape[1]
-    
-    psd_reps = np.empty([n_reps, n_channels, n_fft//2 +1])
-    
+
+    psd_reps = np.empty([n_reps, n_channels, n_fft//2 + 1])
+
     for i, rep in enumerate(raw_data):
         for j, channel in enumerate(rep):
             frequencies, psd_reps[i, j] = signal.welch(
                 channel, fs, window=win, noverlap=n_fft // 4,
                 nperseg=n_fft, scaling='density')
-        
+
     return psd_reps, np.array(frequencies)
 
 
@@ -129,7 +129,7 @@ def hover_hemisphere(
         p_ref=20e-6,
         depropagation_radius=1.0,
 ):
-    
+
     # sort out mic positions and angles
     if mic_angles is None and mic_positions is None:
         raise ValueError('mic_angles or mic_positions must be provided')
@@ -145,11 +145,11 @@ def hover_hemisphere(
     elif mic_positions is not None and mic_angles is None:
         # calculate mic angles from positions
         mic_angles = np.round(
-            np.arctan(mic_positions[:, :-1] / 
+            np.arctan(mic_positions[:, :-1] /
                       drone_position[-1]) * 180 / np.pi, 1)
-    
+
     n_mics = len(mic_angles)
-    
+
     third_octave_bands = [
         25, 31, 40, 50, 63, 80, 100, 125, 160, 200, 250, 400, 500, 630, 800,
         1_000, 1_250, 1_600, 2_000, 2_500, 3_150, 4_000, 5_000, 6_300, 8_000,
@@ -161,24 +161,26 @@ def hover_hemisphere(
 
     # calculate psd for all raw data
     psd_events, psd_freqs = multi_psd(raw_data, fs, n_fft=2**16)
-    psd_db  = 10*np.log10(psd_events / p_ref**2)
+    psd_db = 10*np.log10(psd_events / p_ref**2)
 
-    drone_mic_distances = np.linalg.norm(mic_positions - drone_position, axis=1)
+    drone_mic_distances = np.linalg.norm(
+        mic_positions - drone_position, axis=1)
 
     deprop_distances = drone_mic_distances - depropagation_radius
     atmos = atmospheric_absorption(psd_freqs, temp=14.5)
 
     # depropagation of atmospheric absorption
     # calculate absorption for each frequency and distance to each microphone
-    attenuation_per_freq = np.array([atmos * dist for dist in deprop_distances])
+    attenuation_per_freq = np.array(
+        [atmos * dist for dist in deprop_distances])
 
     # apply to psd, calculate mean across all measurements
     psd_atmos_attenuated = psd_db + attenuation_per_freq
     psd_atmos_attenuated = psd_atmos_attenuated.mean(0)
 
     # depropagation of attenuation due to spherical spread
-    psd_atmos_attenuated -= \
-        (20*np.log10(depropagation_radius / drone_mic_distances).reshape(-1, 1))
+    psd_atmos_attenuated -= (
+        20*np.log10(depropagation_radius / drone_mic_distances).reshape(-1, 1))
 
     # select only positive values
     psd_atmos_attenuated = psd_atmos_attenuated * (psd_atmos_attenuated > 1)
@@ -191,7 +193,8 @@ def hover_hemisphere(
 
         selected_freqs = ((psd_freqs > low_bin) & (psd_freqs < high_bin))
         psd_freq_limited = psd_atmos_attenuated[:, selected_freqs]
-        band_spl[i - 1] = 10*np.log10(np.sum(10**(psd_freq_limited/10), axis=1))
+        band_spl[i - 1] = 10*np.log10(
+            np.sum(10**(psd_freq_limited/10), axis=1))
 
     return band_spl, mic_angles, third_octave_bands[1:-1]
 
@@ -206,9 +209,9 @@ def flyover_hemisphere(data_raw, data_level, mic_positions,
                        time_slice=16,
                        threshold=10,
                        n_segments=11):
-    
+
     n_samples = fs * time_slice
-    
+
     # apply median filter to each row of the data (different recordings)
     level_median_filt = np.apply_along_axis(
         lambda x: signal.medfilt(
@@ -243,14 +246,14 @@ def flyover_hemisphere(data_raw, data_level, mic_positions,
     len_time_seg = len(level_vector) // n_segments
     seg_midpoints = np.arange(len_time_seg//2, len(level_vector), len_time_seg)
 
-    # calculates x distance between midpoint of each segment and max level index
-    # this is the max level index for the central microphone
+    # calculates x distance between midpoint of each segment and
+    # max level index, this is the max level index for the central microphone
     # we assume that this is when the UAV is directly above
-    d_x = - ( flight_speed * (max_level_index - seg_midpoints) / fs )
+    d_x = - (flight_speed * (max_level_index - seg_midpoints) / fs)
 
     chunks = np.lib.stride_tricks.sliding_window_view(
         raw_vector, len_time_seg-1, axis=0)[::len_time_seg-1]
-    
+
     chunk_spls = []
     for chunk in chunks:
         band_spls = []
@@ -264,30 +267,30 @@ def flyover_hemisphere(data_raw, data_level, mic_positions,
 
     drone_positions = np.array(
         [d_x, np.zeros(len(d_x)), np.ones(len(d_x)) * altitude]).T
-    
+
     drone_mic_distances = np.array([np.linalg.norm(
         mic_positions - pos, axis=1) for pos in drone_positions])
     deprop_distances = drone_mic_distances - depropagation_radius
 
     atmos = atmospheric_absorption(freqs, temp=14.5)
     attenuation_per_freq = np.array(
-        [[atmos * dist for dist in drone_location] 
+        [[atmos * dist for dist in drone_location]
          for drone_location in deprop_distances])
     freqdep_deattenuation = 10*np.log10(
         depropagation_radius / drone_mic_distances).reshape(
             -1, 9, 1) - attenuation_per_freq
-    
+
     chunk_spls_deattenuated = chunk_spls - freqdep_deattenuation
     chunk_overall_spls_deattenuated = 10*np.log10(
         np.sum(10**(chunk_spls_deattenuated/10), axis=2))
-    
+
     theta_angles = np.round(
         np.arctan(mic_positions[:, 1] / altitude) * 180 / np.pi, 1)
     phi_angles = np.round(
         np.arctan(drone_positions[:, 0] / altitude) * 180 / np.pi, 1)
-    
+
     return chunk_spls_deattenuated, chunk_overall_spls_deattenuated, \
-              theta_angles, phi_angles, freqs
+        theta_angles, phi_angles, freqs
 
 
 # data_folder = 'EE_T1_25_F15_N_S_135949_uw/'
@@ -308,8 +311,8 @@ def flyover_hemisphere(data_raw, data_level, mic_positions,
 # ])
 
 # chunk_spls_deatt, chunk_overall_spls_deatt, thetas, phis, freqs = \
-#     flyover_hemisphere(data_raw, 
-#                        data_lafp, 
-#                        mic_positions, 
+#     flyover_hemisphere(data_raw,
+#                        data_lafp,
+#                        mic_positions,
 #                        flight_speed=15,
 #                        fs=fs)

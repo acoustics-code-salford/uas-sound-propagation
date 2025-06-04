@@ -8,7 +8,6 @@ import multiprocessing
 
 from scipy import signal
 from scipy.ndimage import gaussian_filter
-from pyfar.dsp.filter import fractional_octave_bands
 from scipy.interpolate import RegularGridInterpolator
 from . import interpolators, utils
 
@@ -145,8 +144,11 @@ class UASEventRenderer():
             reflection_zeros = np.zeros_like(reflection)
             reflection_zeros[whole_offset:] += reflection[:-whole_offset]
             reflection = reflection_zeros
+
         self._d = direct.T
         self._r = reflection.T
+
+        return self._d + self._r
 
     def write_output(self, filename, output='combined'):
 
@@ -225,7 +227,7 @@ class PropagationPath():
                 fs=self.fs
             )
         '''Array describing position of source at every sample point.'''
-        
+
         self.atmos_absorp = atmos_absorp
 
         # calculate delays and amplitude curve
@@ -271,10 +273,6 @@ class PropagationPath():
         if self.atmos_absorp:
             filters.append(AtmosphericAbsorptionFilter(fs=self.fs))
 
-        # # add directivity if hemisphere data is specified
-        # if directivity_directory is not None:
-        #     filters.append(DirectivityFilter(directivity_directory, fs=self.fs))
-
         # add ground filter if surface is set (reflected path)
         if self.reflection_surface is not None:
             filters.append(GroundReflectionFilter(
@@ -282,8 +280,8 @@ class PropagationPath():
 
         x_out = np.zeros(len(x))
 
-        for i, (position, frame) in enumerate(
-                zip(self.flightpath(fs=self.fs / self._hop_len).T, x_windowed)):
+        for i, (position, frame) in enumerate(zip(
+                self.flightpath(fs=self.fs / self._hop_len).T, x_windowed)):
 
             for filter in filters:
                 frame = filter.filter(frame, position)
@@ -481,16 +479,12 @@ class AtmosphericAbsorptionFilter():
 
 class DirectivityFilter():
 
-    def __init__(self,
-        data_directory,
-        fs=48_000):
+    def __init__(self, data_directory, fs=48_000):
 
-        self.fs=fs
-
-        self._thetas = np.loadtxt(
-            f'{data_directory}/thetas.csv', delimiter=',')
-        self._phis = np.loadtxt(
-            f'{data_directory}/phis.csv', delimiter=',')
+        self.fs = fs
+        self._thetas = \
+            np.loadtxt(f'{data_directory}/thetas.csv', delimiter=',')
+        self._phis = np.loadtxt(f'{data_directory}/phis.csv', delimiter=',')
 
         # load raw data
         directionality_db = np.load(f'{data_directory}/db_diffs.npy')
@@ -502,25 +496,69 @@ class DirectivityFilter():
             (self._phis, self._thetas), smooth_atten, bounds_error=False)
 
     def clamped_interp(self, point):
-        theta, phi = point
-        clamped_phi = np.clip(phi, self._phis[0], self._phis[-1])
-        clamped_theta = np.clip(theta, self._thetas[0], self._thetas[-1])
-        return self.grid_interpolator((clamped_phi, clamped_theta))
+        roll, pitch = point
+        clamped_pitch = np.clip(pitch, self._phis[0], self._phis[-1])
+        clamped_roll = np.clip(roll, self._thetas[0], self._thetas[-1])
+        return self.grid_interpolator((clamped_pitch, clamped_roll))
 
     def filter(self, x, flightpath):
         # filter into third-octave bands
         xfilt = pyfar.dsp.filter.fractional_octave_bands(
             pyfar.Signal(x, self.fs), 3, frequency_range=(19, 20e3))
 
-        # need to consider how to change this to reorient in the direction of
-        # travel for the drone (e.g. phi is front/back angle **relative to the
-        # forward orientation of the drone**, theta is side to side)
-        theta = np.rad2deg(np.arctan(flightpath[0] / flightpath[2]))
-        phi = np.rad2deg(np.arctan(flightpath[1] / flightpath[2]))
+        # calculate relative pitch and roll for hemisphere interpolation
+        roll, pitch = self.relative_attitude(flightpath)
 
         frequency_weighted_sig = \
-            xfilt.time.squeeze() * self.clamped_interp((theta, phi)).T
+            xfilt.time.squeeze() * self.clamped_interp((roll, pitch)).T
         return frequency_weighted_sig.sum(0)
+
+    def relative_attitude(self, flightpath):
+        flightpath = flightpath
+        p_start = flightpath[:, 0]
+        p_end = flightpath[:, -1]
+        displacement = p_end - p_start
+
+        # establish coordinate axes in direction of travel
+        forward = displacement / np.linalg.norm(displacement)
+        right = np.cross(forward, np.array([0, 0, 1]))
+        right /= np.linalg.norm(right)
+
+        roll_deg = self.compute_signed_angle(flightpath.T, forward)
+        pitch_deg = self.compute_signed_angle(flightpath.T, right)
+
+        return pitch_deg, roll_deg
+
+    def compute_signed_angle(self, R, normal, baseline=np.array([0, 0, 1])):
+        """
+        Projects vectors onto a plane defined by the normal vector,
+        computes the angle between the projected baseline and each R vector.
+
+        Parameters:
+            aircraft_coordinates (np.ndarray): Nx3 array of vectors.
+            normal (np.ndarray): Normal vector of the plane to project onto.
+            baseline (np.ndarray): Reference 3D vector.
+        Returns:
+            np.ndarray: Angles in degrees.
+        """
+
+        # Project R onto the plane
+        R_dot_n = R @ normal
+        R_proj = R - np.outer(R_dot_n, normal)
+        R_proj_norm = np.linalg.norm(R_proj, axis=1)
+        R_unit = R_proj / R_proj_norm[:, np.newaxis]
+
+        # Project baseline onto the plane
+        baseline_proj = baseline - np.dot(baseline, normal) * normal
+        baseline_unit = baseline_proj / np.linalg.norm(baseline_proj)
+
+        # Angle between projected vectors
+        dot = R_unit @ baseline_unit
+        cross = np.cross(np.tile(baseline_unit, (len(R), 1)), R_unit)
+        signed_component = cross @ normal
+        angles_rad = np.arctan2(signed_component, dot)
+
+        return np.degrees(angles_rad)
 
 
 class FlightPath():
