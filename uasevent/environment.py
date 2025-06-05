@@ -1,5 +1,6 @@
 import os
 import json
+import yaml
 import pyfar
 import warnings
 import numpy as np
@@ -480,11 +481,15 @@ class AtmosphericAbsorptionFilter():
 class DirectivityFilter():
 
     def __init__(self, data_directory, fs=48_000):
-
+        
+        metadata = yaml.load(
+            open(f'{data_directory}/meta.yaml', 'r'),
+            Loader=yaml.SafeLoader)
+        self._cutoff = metadata['bpf_cutoff_hz']
+        self._roll_angles = metadata['roll_angles']
+        self._pitch_angles = metadata['pitch_angles']
+        self._freqs = np.array(metadata['frequencies'])
         self.fs = fs
-        self._thetas = \
-            np.loadtxt(f'{data_directory}/thetas.csv', delimiter=',')
-        self._phis = np.loadtxt(f'{data_directory}/phis.csv', delimiter=',')
 
         # load raw data
         directionality_db = np.load(f'{data_directory}/db_diffs.npy')
@@ -493,12 +498,15 @@ class DirectivityFilter():
 
         # interpolation object to return gain values
         self.grid_interpolator = RegularGridInterpolator(
-            (self._phis, self._thetas), smooth_atten, bounds_error=False)
+            (self._pitch_angles, self._roll_angles), smooth_atten,
+            bounds_error=False)
 
     def clamped_interp(self, point):
         roll, pitch = point
-        clamped_pitch = np.clip(pitch, self._phis[0], self._phis[-1])
-        clamped_roll = np.clip(roll, self._thetas[0], self._thetas[-1])
+        clamped_pitch = np.clip(
+            pitch, self._pitch_angles[0], self._pitch_angles[-1])
+        clamped_roll = np.clip(
+            roll, self._roll_angles[0], self._roll_angles[-1])
         return self.grid_interpolator((clamped_pitch, clamped_roll))
 
     def filter(self, x, flightpath):
@@ -509,12 +517,18 @@ class DirectivityFilter():
         # calculate relative pitch and roll for hemisphere interpolation
         roll, pitch = self.relative_attitude(flightpath)
 
-        frequency_weighted_sig = \
-            xfilt.time.squeeze() * self.clamped_interp((roll, pitch)).T
+        band_weights = self.clamped_interp((roll, pitch)).T
+        # zero below BPF to remove LF noise
+        band_weights[self._freqs < self._cutoff] = 0
+
+        frequency_weighted_sig = xfilt.time.squeeze() * band_weights
         return frequency_weighted_sig.sum(0)
 
     def relative_attitude(self, flightpath):
-        flightpath = flightpath
+        # NOTE: this approach will only work for single-segment trajectories
+        # will need to find an approach to do this segmentwise -- remember
+        # that the purpose of this is to determine the orientation of the drone
+        # assuming it is pointed in the same direction it is moving
         p_start = flightpath[:, 0]
         p_end = flightpath[:, -1]
         displacement = p_end - p_start

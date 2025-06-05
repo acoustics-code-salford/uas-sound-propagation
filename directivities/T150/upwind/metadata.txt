@@ -1,2 +1,0 @@
-altitude : 25 m
-speed    : 15 m/s

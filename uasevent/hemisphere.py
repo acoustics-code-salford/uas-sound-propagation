@@ -310,9 +310,14 @@ def flyover_hemisphere(data_raw, data_level, mic_positions,
 #     [0, 43.3, 0]
 # ])
 
-# chunk_spls_deatt, chunk_overall_spls_deatt, thetas, phis, freqs = \
+# hemisphere_freqdep, hemisphere_overall, thetas, phis, freqs = \
 #     flyover_hemisphere(data_raw,
 #                        data_lafp,
 #                        mic_positions,
+#                        altitude=25,
 #                        flight_speed=15,
 #                        fs=fs)
+#
+## calculate difference between hover hemisphere (directly overhead
+## recording used for source signal) and other propagation angles
+# db_diffs = hemisphere_freqdep - hemisphere_freqdep[5, 4]
