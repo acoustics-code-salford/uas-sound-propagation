@@ -12,6 +12,8 @@ from scipy.ndimage import gaussian_filter
 from scipy.interpolate import RegularGridInterpolator
 from . import interpolators, utils
 
+warnings.filterwarnings('error')
+
 
 class UASEventRenderer():
     '''
@@ -35,7 +37,9 @@ class UASEventRenderer():
         '''Height of receiver position, metres (default 1.5)'''
         self.ground_material = ground_material
         '''Material for ground reflection'''
-        self.flight_parameters = json.load(open(flight_spec))
+        with open(flight_spec) as file:
+            self.flight_parameters = json.load(file)
+        # self.flight_parameters = json.load(open(flight_spec))
         '''JSON file with segmentwise description of flight path'''
         self.output = None
         '''Initialise var to contain rendered signal'''
@@ -482,9 +486,8 @@ class DirectivityFilter():
 
     def __init__(self, data_directory, fs=48_000):
         
-        metadata = yaml.load(
-            open(f'{data_directory}/meta.yaml', 'r'),
-            Loader=yaml.SafeLoader)
+        with open(f'{data_directory}/meta.yaml', 'r') as file:
+            metadata = yaml.load(file, Loader=yaml.SafeLoader)
         self._cutoff = metadata['bpf_cutoff_hz']
         self._roll_angles = metadata['roll_angles']
         self._pitch_angles = metadata['pitch_angles']
@@ -529,12 +532,24 @@ class DirectivityFilter():
         # will need to find an approach to do this segmentwise -- remember
         # that the purpose of this is to determine the orientation of the drone
         # assuming it is pointed in the same direction it is moving
+
         p_start = flightpath[:, 0]
         p_end = flightpath[:, -1]
         displacement = p_end - p_start
 
-        # establish coordinate axes in direction of travel
-        forward = displacement / np.linalg.norm(displacement)
+        # negate Z component so source is not considered to tilt / faceplant
+        # towards the ground -- we are considering only the orientation of the
+        # source here, Z component is still taken into account for angle
+        # calculation in the next step
+        displacement[2] = 0 
+
+        try:  # establish coordinate axes in direction of travel
+            forward = displacement / np.linalg.norm(displacement)
+        except RuntimeWarning:  # if the above results in nans
+            forward = np.array([1., 0, 0])  # set arbitrary forward direction
+            # this should not matter for hover (also ascent/descent)
+            # operations as recorded hemispheres are symmetrical
+
         right = np.cross(forward, np.array([0, 0, 1]))
         right /= np.linalg.norm(right)
 
