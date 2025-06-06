@@ -485,7 +485,7 @@ class AtmosphericAbsorptionFilter():
 class DirectivityFilter():
 
     def __init__(self, data_directory, fs=48_000):
-        
+
         with open(f'{data_directory}/meta.yaml', 'r') as file:
             metadata = yaml.load(file, Loader=yaml.SafeLoader)
         self._cutoff = metadata['bpf_cutoff_hz']
@@ -515,7 +515,8 @@ class DirectivityFilter():
     def filter(self, x, flightpath):
         # filter into third-octave bands
         xfilt = pyfar.dsp.filter.fractional_octave_bands(
-            pyfar.Signal(x, self.fs), 3, frequency_range=(19, 20e3))
+            pyfar.Signal(x, self.fs), 3, frequency_range=(
+                self._freqs[0], self._freqs[-1]))
 
         # calculate relative pitch and roll for hemisphere interpolation
         roll, pitch = self.relative_attitude(flightpath)
@@ -541,7 +542,7 @@ class DirectivityFilter():
         # towards the ground -- we are considering only the orientation of the
         # source here, Z component is still taken into account for angle
         # calculation in the next step
-        displacement[2] = 0 
+        displacement[2] = 0
 
         try:  # establish coordinate axes in direction of travel
             forward = displacement / np.linalg.norm(displacement)

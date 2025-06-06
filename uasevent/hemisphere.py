@@ -151,9 +151,9 @@ def hover_hemisphere(
     n_mics = len(mic_angles)
 
     third_octave_bands = [
-        25, 31, 40, 50, 63, 80, 100, 125, 160, 200, 250, 400, 500, 630, 800,
-        1_000, 1_250, 1_600, 2_000, 2_500, 3_150, 4_000, 5_000, 6_300, 8_000,
-        10_000, 12_500, 16_000, 20_000
+        25, 31, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630,
+        800, 1_000, 1_250, 1_600, 2_000, 2_500, 3_150, 4_000, 5_000, 6_300,
+        8_000, 10_000, 12_500, 16_000, 20_000
     ]
 
     files = glob.glob(f'{data_folder}/*.mat')
@@ -291,33 +291,3 @@ def flyover_hemisphere(data_raw, data_level, mic_positions,
 
     return chunk_spls_deattenuated, chunk_overall_spls_deattenuated, \
         theta_angles, phi_angles, freqs
-
-
-# data_folder = 'EE_T1_25_F15_N_S_135949_uw/'
-# files = glob.glob(f'{data_folder}/*.mat')
-# data_raw, data_metrics, fs = get_data_from_mat(files)
-# data_lafp = np.array([d['LAFp'] for d in data_metrics])
-
-# mic_positions = np.array([
-#     [0, -43.3, 0],
-#     [0, -25.0, 0],
-#     [0, -14.4, 0],
-#     [0, -6.7, 0],
-#     [0, 0, 0],
-#     [0, 6.7, 0],
-#     [0, 14.4, 0],
-#     [0, 25.0, 0],
-#     [0, 43.3, 0]
-# ])
-
-# hemisphere_freqdep, hemisphere_overall, thetas, phis, freqs = \
-#     flyover_hemisphere(data_raw,
-#                        data_lafp,
-#                        mic_positions,
-#                        altitude=25,
-#                        flight_speed=15,
-#                        fs=fs)
-#
-## calculate difference between hover hemisphere (directly overhead
-## recording used for source signal) and other propagation angles
-# db_diffs = hemisphere_freqdep - hemisphere_freqdep[5, 4]
