@@ -1,12 +1,18 @@
 import os
 import json
+import yaml
+import pyfar
 import warnings
 import numpy as np
 import soundfile as sf
 import multiprocessing
-from toolz import pipe
+
 from scipy import signal
+from scipy.ndimage import gaussian_filter
+from scipy.interpolate import RegularGridInterpolator
 from . import interpolators, utils
+
+warnings.filterwarnings('error')
 
 
 class UASEventRenderer():
@@ -19,17 +25,21 @@ class UASEventRenderer():
             flight_spec,
             fs=48_000,
             ground_material='grass',
+            atmos_absorp=True,
             receiver_height=1.5):
         '''
         Initialises all necessary attributes for the UASEventRenderer object.
         '''
+        self.atmos_absorp = atmos_absorp
         self.fs = fs
         '''Sampling frequency in Hz (default 48_000)'''
         self.receiver_height = receiver_height
         '''Height of receiver position, metres (default 1.5)'''
         self.ground_material = ground_material
         '''Material for ground reflection'''
-        self.flight_parameters = json.load(open(flight_spec))
+        with open(flight_spec) as file:
+            self.flight_parameters = json.load(file)
+        # self.flight_parameters = json.load(open(flight_spec))
         '''JSON file with segmentwise description of flight path'''
         self.output = None
         '''Initialise var to contain rendered signal'''
@@ -67,20 +77,22 @@ class UASEventRenderer():
         # set up direct and reflected paths
         self.direct_path = PropagationPath(
             FlightPath(self._flight_parameters),
-            'direct', self.receiver_height, self.fs
+            'direct', self.receiver_height, self.fs,
+            atmos_absorp=self.atmos_absorp
         )
 
         self.ground_reflection = PropagationPath(
             FlightPath(self._flight_parameters),
             'reflection', self.receiver_height, self.fs,
-            self.ground_material
+            reflection_surface=self.ground_material,
+            atmos_absorp=self.atmos_absorp
         )
 
         self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
         self.direct_path._inv_sqr_attn /= self._norm_scaling
         self.ground_reflection._inv_sqr_attn /= self._norm_scaling
 
-    def render(self, x):
+    def render(self, x, directivity_dir=None):
         '''
         Renders output signal based on input parameters.
 
@@ -106,7 +118,7 @@ class UASEventRenderer():
         for i, path in enumerate(pathlist):
             p = multiprocessing.Process(
                 target=self.worker,
-                args=(path, x, str(i)))
+                args=(path, x, directivity_dir, str(i)))
             jobs.append(p)
             p.start()
 
@@ -137,8 +149,11 @@ class UASEventRenderer():
             reflection_zeros = np.zeros_like(reflection)
             reflection_zeros[whole_offset:] += reflection[:-whole_offset]
             reflection = reflection_zeros
+
         self._d = direct.T
         self._r = reflection.T
+
+        return self._d + self._r
 
     def write_output(self, filename, output='combined'):
 
@@ -172,11 +187,11 @@ class UASEventRenderer():
             header=f't={start_t}, fmt={coord_fmt}, path={path_type}'
         )
 
-    def worker(self, prop_path, x, key):
+    def worker(self, prop_path, x, directivity_dir, key):
         '''
         Basic framework for parallel processes
         '''
-        path_output = prop_path.process(x)
+        path_output = prop_path.process(x, directivity_dir)
         self.return_dict[key] = path_output
 
 
@@ -192,6 +207,7 @@ class PropagationPath():
             receiver_height=1.5,
             fs=48_000,
             reflection_surface=None,
+            atmos_absorp=True,
             c=343.0,
             frame_len=512
     ):
@@ -217,6 +233,8 @@ class PropagationPath():
             )
         '''Array describing position of source at every sample point.'''
 
+        self.atmos_absorp = atmos_absorp
+
         # calculate delays and amplitude curve
         _, _, r = utils.cart_to_sph(self.path_array)
         delays = (r / c) * self.fs
@@ -225,9 +243,9 @@ class PropagationPath():
         self._inv_sqr_attn = 1 / r**2
 
         # calculate angles per frame for filters
-        self._sph_per_frame = utils.cart_to_sph(
-            self.flightpath(fs=self.fs / self._hop_len)
-        ).T
+        # self._sph_per_frame = utils.cart_to_sph(
+        #     self.flightpath(fs=self.fs / self._hop_len)
+        # ).T
 
     def _apply_doppler(self, x):
         # init output array and initial read position
@@ -248,7 +266,7 @@ class PropagationPath():
     def _apply_attenuation(self, x):
         return x * self._inv_sqr_attn
 
-    def _filter(self, x):
+    def _filter(self, x, directivity_directory=None):
         # neat trick to get windowed frames
         x_windowed = np.lib.stride_tricks.sliding_window_view(
             x, self.frame_len)[::self._hop_len] * np.hanning(self.frame_len)
@@ -256,17 +274,19 @@ class PropagationPath():
         # list of filter stages
         filters = []
 
-        # add atmospheric absorption
-        filters.append(AtmosphericAbsorptionFilter())
+        # add atmospheric absorption if enabled
+        if self.atmos_absorp:
+            filters.append(AtmosphericAbsorptionFilter(fs=self.fs))
 
         # add ground filter if surface is set (reflected path)
         if self.reflection_surface is not None:
-            filters.append(GroundReflectionFilter(self.reflection_surface))
+            filters.append(GroundReflectionFilter(
+                self.reflection_surface, fs=self.fs))
 
         x_out = np.zeros(len(x))
 
-        for i, (position, frame) in enumerate(
-                zip(self._sph_per_frame, x_windowed)):
+        for i, (position, frame) in enumerate(zip(
+                self.flightpath(fs=self.fs / self._hop_len).T, x_windowed)):
 
             for filter in filters:
                 frame = filter.filter(frame, position)
@@ -274,9 +294,14 @@ class PropagationPath():
             frame_index = i * self._hop_len
             x_out[frame_index:frame_index + self.frame_len] += frame
 
+        if directivity_directory is not None:
+            directivity = DirectivityFilter(
+                directivity_directory, fs=self.fs)
+            x_out = directivity.filter(x_out, self.flightpath(fs=self.fs))
+
         return x_out
 
-    def process(self, x):
+    def process(self, x, directivity_directory=None):
         '''
         Processes input signal to add effects of propagation along single
         specified path. Incorporates amplitude envelopes, doppler effect,
@@ -299,12 +324,9 @@ class PropagationPath():
                           f'auto-repeating input x {n_reps}...')
             x = np.tile(x, n_reps)
 
-        output = pipe(
-            x,
-            self._apply_doppler,
-            self._filter,
-            self._apply_attenuation
-        )
+        output = self._apply_doppler(x)
+        output = self._filter(output, directivity_directory)
+        output = self._apply_attenuation(output)
         return output
 
 
@@ -379,6 +401,7 @@ class GroundReflectionFilter():
         `lowpass_sig`:
             Filtered signal.
         '''
+        position = utils.cart_to_sph(position)
         _, phi, _ = position
         phi = np.pi - phi
         h = signal.firls(self.n_taps, self.freqs,
@@ -394,7 +417,7 @@ class AtmosphericAbsorptionFilter():
     atmospheric absorption.
     '''
     def __init__(self,
-                 freqs=np.geomspace(20, 24000),
+                 freqs=np.geomspace(20, 24_000),
                  temp=20.0,
                  humidity=80.0,
                  pressure=101.325,
@@ -451,11 +474,121 @@ class AtmosphericAbsorptionFilter():
         return 1 - alpha
 
     def filter(self, x, position):
+        position = utils.cart_to_sph(position)
         _, _, r = position
         h = signal.firls(self.n_taps, self.freqs,
                          self._attenuation**r,
                          fs=self.fs)
         return signal.fftconvolve(x, h, 'same')
+
+
+class DirectivityFilter():
+
+    def __init__(self, data_directory, fs=48_000):
+
+        with open(f'{data_directory}/meta.yaml', 'r') as file:
+            metadata = yaml.load(file, Loader=yaml.SafeLoader)
+        self._cutoff = metadata['bpf_cutoff_hz']
+        self._roll_angles = metadata['roll_angles']
+        self._pitch_angles = metadata['pitch_angles']
+        self._freqs = np.array(metadata['frequencies'])
+        self.fs = fs
+
+        # load raw data
+        directionality_db = np.load(f'{data_directory}/db_diffs.npy')
+        # smooth attenuation grids to avoid audible discontinuities in output
+        smooth_atten = gaussian_filter(directionality_db, sigma=1)
+
+        # interpolation object to return gain values
+        self.grid_interpolator = RegularGridInterpolator(
+            (self._pitch_angles, self._roll_angles), smooth_atten,
+            bounds_error=False)
+
+    def clamped_interp(self, point):
+        roll, pitch = point
+        clamped_pitch = np.clip(
+            pitch, self._pitch_angles[0], self._pitch_angles[-1])
+        clamped_roll = np.clip(
+            roll, self._roll_angles[0], self._roll_angles[-1])
+        return self.grid_interpolator((clamped_pitch, clamped_roll))
+
+    def filter(self, x, flightpath):
+        # filter into third-octave bands
+        xfilt = pyfar.dsp.filter.fractional_octave_bands(
+            pyfar.Signal(x, self.fs), 3, frequency_range=(
+                self._freqs[0], self._freqs[-1]))
+
+        # calculate relative pitch and roll for hemisphere interpolation
+        roll, pitch = self.relative_attitude(flightpath)
+
+        band_weights = self.clamped_interp((roll, pitch)).T
+        # zero below BPF to remove LF noise
+        band_weights[self._freqs < self._cutoff] = 0
+
+        frequency_weighted_sig = xfilt.time.squeeze() * band_weights
+        return frequency_weighted_sig.sum(0)
+
+    def relative_attitude(self, flightpath):
+        # NOTE: this approach will only work for single-segment trajectories
+        # will need to find an approach to do this segmentwise -- remember
+        # that the purpose of this is to determine the orientation of the drone
+        # assuming it is pointed in the same direction it is moving
+
+        p_start = flightpath[:, 0]
+        p_end = flightpath[:, -1]
+        displacement = p_end - p_start
+
+        # negate Z component so source is not considered to tilt / faceplant
+        # towards the ground -- we are considering only the orientation of the
+        # source here, Z component is still taken into account for angle
+        # calculation in the next step
+        displacement[2] = 0
+
+        try:  # establish coordinate axes in direction of travel
+            forward = displacement / np.linalg.norm(displacement)
+        except RuntimeWarning:  # if the above results in nans
+            forward = np.array([1., 0, 0])  # set arbitrary forward direction
+            # this should not matter for hover (also ascent/descent)
+            # operations as recorded hemispheres are symmetrical
+
+        right = np.cross(forward, np.array([0, 0, 1]))
+        right /= np.linalg.norm(right)
+
+        roll_deg = self.compute_signed_angle(flightpath.T, forward)
+        pitch_deg = self.compute_signed_angle(flightpath.T, right)
+
+        return pitch_deg, roll_deg
+
+    def compute_signed_angle(self, R, normal, baseline=np.array([0, 0, 1])):
+        """
+        Projects vectors onto a plane defined by the normal vector,
+        computes the angle between the projected baseline and each R vector.
+
+        Parameters:
+            aircraft_coordinates (np.ndarray): Nx3 array of vectors.
+            normal (np.ndarray): Normal vector of the plane to project onto.
+            baseline (np.ndarray): Reference 3D vector.
+        Returns:
+            np.ndarray: Angles in degrees.
+        """
+
+        # Project R onto the plane
+        R_dot_n = R @ normal
+        R_proj = R - np.outer(R_dot_n, normal)
+        R_proj_norm = np.linalg.norm(R_proj, axis=1)
+        R_unit = R_proj / R_proj_norm[:, np.newaxis]
+
+        # Project baseline onto the plane
+        baseline_proj = baseline - np.dot(baseline, normal) * normal
+        baseline_unit = baseline_proj / np.linalg.norm(baseline_proj)
+
+        # Angle between projected vectors
+        dot = R_unit @ baseline_unit
+        cross = np.cross(np.tile(baseline_unit, (len(R), 1)), R_unit)
+        signed_component = cross @ normal
+        angles_rad = np.arctan2(signed_component, dot)
+
+        return np.degrees(angles_rad)
 
 
 class FlightPath():
