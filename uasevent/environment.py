@@ -4,7 +4,6 @@ import yaml
 import pyfar
 import warnings
 import numpy as np
-import soundfile as sf
 import multiprocessing
 
 from scipy import signal
@@ -38,8 +37,12 @@ class UASEventRenderer():
         self.ground_material = ground_material
         '''Material for ground reflection'''
         with open(flight_spec) as file:
-            self.flight_parameters = json.load(file)
-        # self.flight_parameters = json.load(open(flight_spec))
+            if flight_spec.endswith('.json'):
+                self.fp_type = 'json'
+                self.flight_parameters = json.load(file)
+            elif flight_spec.endswith('.csv'):
+                self.fp_type = 'csv'
+                self.flight_parameters = np.loadtxt(flight_spec, delimiter=',')
         '''JSON file with segmentwise description of flight path'''
         self.output = None
         '''Initialise var to contain rendered signal'''
@@ -75,18 +78,32 @@ class UASEventRenderer():
 
     def _setup_paths(self):
         # set up direct and reflected paths
-        self.direct_path = PropagationPath(
-            FlightPath(self._flight_parameters),
-            'direct', self.receiver_height, self.fs,
-            atmos_absorp=self.atmos_absorp
-        )
+        if self.fp_type == 'json':
+            self.direct_path = PropagationPath(
+                FlightPath(self._flight_parameters),
+                'direct', self.receiver_height, self.fs,
+                atmos_absorp=self.atmos_absorp
+            )
 
-        self.ground_reflection = PropagationPath(
-            FlightPath(self._flight_parameters),
-            'reflection', self.receiver_height, self.fs,
-            reflection_surface=self.ground_material,
-            atmos_absorp=self.atmos_absorp
-        )
+            self.ground_reflection = PropagationPath(
+                FlightPath(self._flight_parameters),
+                'reflection', self.receiver_height, self.fs,
+                reflection_surface=self.ground_material,
+                atmos_absorp=self.atmos_absorp
+            )
+        elif self.fp_type == 'csv':
+            self.direct_path = PropagationPath(
+                UnityFlightPath(self._flight_parameters),
+                'direct', self.receiver_height, self.fs,
+                atmos_absorp=self.atmos_absorp
+            )
+
+            self.ground_reflection = PropagationPath(
+                UnityFlightPath(self._flight_parameters),
+                'reflection', self.receiver_height, self.fs,
+                reflection_surface=self.ground_material,
+                atmos_absorp=self.atmos_absorp
+            )
 
         self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
         self.direct_path._inv_sqr_attn /= self._norm_scaling
@@ -171,21 +188,6 @@ class UASEventRenderer():
                                  self._r, path_type='reflection')
         else:
             raise ValueError('Invalid output type')
-
-    def _write_outfiles(self, filename, data,
-                        start_t=0.0,
-                        path_type='direct',
-                        coord_fmt='unity'):
-
-        sf.write(f'{filename}.wav', data, self.fs, 'PCM_24')
-        np.savetxt(
-            f'{filename}.csv', self._flightpath(
-                receiver_height=self.receiver_height,
-                path_type=path_type,
-                coord_fmt=coord_fmt).T,
-            delimiter=',', fmt='%.2f',
-            header=f't={start_t}, fmt={coord_fmt}, path={path_type}'
-        )
 
     def worker(self, prop_path, x, directivity_dir, key):
         '''
@@ -320,8 +322,8 @@ class PropagationPath():
         path_len = len(self.path_array[0]) + 2
         if len(x) <= path_len:
             n_reps = int(np.ceil((path_len) / len(x)))
-            warnings.warn(f'Input signal shorter than path, '
-                          f'auto-repeating input x {n_reps}...')
+            print(f'Input signal shorter than path, '
+                  f'auto-repeating input x {n_reps}...')
             x = np.tile(x, n_reps)
 
         output = self._apply_doppler(x)
@@ -658,3 +660,32 @@ class FlightPath():
         # map to axes
         xyz = (start + vector * x_t).T
         return xyz
+
+
+class UnityFlightPath():
+    def __init__(self, trajectory):
+        self.trajectory = trajectory
+        self.unity_fs = int(1 / np.diff(self.trajectory[:, 0])[0])
+
+    def __call__(self,
+                 fs=48_000,
+                 receiver_height=0.0,
+                 path_type='direct'):
+
+        sample_pts = np.arange(
+            0, len(self.trajectory) / self.unity_fs, 1 / fs)
+        interpolated_trajectory = np.array([
+            np.interp(sample_pts, self.trajectory[:, 0], self.trajectory[:, i])
+            for i in range(self.trajectory.shape[1])
+        ])
+
+        if path_type == 'direct':
+            interpolated_trajectory[3] -= receiver_height
+        elif path_type == 'reflection':
+            interpolated_trajectory[3] = \
+                - interpolated_trajectory[3] - receiver_height
+        else:
+            raise ValueError(
+                'Path type must be either "direct" or "reflection"'
+            )
+        return interpolated_trajectory[1:4]
