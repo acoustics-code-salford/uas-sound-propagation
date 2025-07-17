@@ -405,7 +405,6 @@ class GroundReflectionFilter():
         '''
         position = utils.cart_to_sph(position)
         _, phi, _ = position
-        phi = np.pi - phi
         h = signal.firls(self.n_taps, self.freqs,
                          utils.rectify(self._R(phi)),
                          fs=self.fs)
