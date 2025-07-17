@@ -244,11 +244,6 @@ class PropagationPath():
         self._delta_delays = np.diff(delays)
         self._inv_sqr_attn = 1 / r**2
 
-        # calculate angles per frame for filters
-        # self._sph_per_frame = utils.cart_to_sph(
-        #     self.flightpath(fs=self.fs / self._hop_len)
-        # ).T
-
     def _apply_doppler(self, x):
         # init output array and initial read position
         out = np.zeros(len(self._delta_delays) + 1)
@@ -405,7 +400,6 @@ class GroundReflectionFilter():
         '''
         position = utils.cart_to_sph(position)
         _, phi, _ = position
-        phi = np.pi - phi
         h = signal.firls(self.n_taps, self.freqs,
                          utils.rectify(self._R(phi)),
                          fs=self.fs)
