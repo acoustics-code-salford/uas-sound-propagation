@@ -48,7 +48,6 @@ class UASEventRenderer():
         '''JSON file with segmentwise description of flight path'''
         self.output = None
         '''Initialise var to contain rendered signal'''
-        
 
     @property
     def receiver_height(self):
@@ -282,7 +281,7 @@ class PropagationPath():
 
         # add atmospheric absorption if enabled
         if self.atmos_absorp:
-            filters.append(AtmosphericAbsorptionFilter(**self.atmos_params, 
+            filters.append(AtmosphericAbsorptionFilter(**self.atmos_params,
                                                        fs=self.fs))
 
         # add ground filter if surface is set (reflected path)
