@@ -25,11 +25,13 @@ class UASEventRenderer():
             fs=48_000,
             ground_material='grass',
             atmos_absorp=True,
-            receiver_height=1.5):
+            receiver_height=1.5,
+            **kwargs):
         '''
         Initialises all necessary attributes for the UASEventRenderer object.
         '''
         self.atmos_absorp = atmos_absorp
+        self.atmos_params = kwargs
         self.fs = fs
         '''Sampling frequency in Hz (default 48_000)'''
         self.receiver_height = receiver_height
@@ -82,27 +84,31 @@ class UASEventRenderer():
             self.direct_path = PropagationPath(
                 FlightPath(self._flight_parameters),
                 'direct', self.receiver_height, self.fs,
-                atmos_absorp=self.atmos_absorp
+                atmos_absorp=self.atmos_absorp,
+                atmos_params=self.atmos_params
             )
 
             self.ground_reflection = PropagationPath(
                 FlightPath(self._flight_parameters),
                 'reflection', self.receiver_height, self.fs,
                 reflection_surface=self.ground_material,
-                atmos_absorp=self.atmos_absorp
+                atmos_absorp=self.atmos_absorp,
+                atmos_params=self.atmos_params
             )
         elif self.fp_type == 'csv':
             self.direct_path = PropagationPath(
                 UnityFlightPath(self._flight_parameters),
                 'direct', self.receiver_height, self.fs,
-                atmos_absorp=self.atmos_absorp
+                atmos_absorp=self.atmos_absorp,
+                atmos_params=self.atmos_params
             )
 
             self.ground_reflection = PropagationPath(
                 UnityFlightPath(self._flight_parameters),
                 'reflection', self.receiver_height, self.fs,
                 reflection_surface=self.ground_material,
-                atmos_absorp=self.atmos_absorp
+                atmos_absorp=self.atmos_absorp,
+                atmos_params=self.atmos_params
             )
 
         self._norm_scaling = np.max(abs(self.direct_path._inv_sqr_attn))
@@ -211,11 +217,13 @@ class PropagationPath():
             reflection_surface=None,
             atmos_absorp=True,
             c=343.0,
-            frame_len=512
+            frame_len=512,
+            atmos_params=None
     ):
         '''
         Initialises PropagationPath object.
         '''
+        self.atmos_params = atmos_params
         self.fs = fs
         '''Sampling frequency in Hz (default `48_000`)'''
         self.reflection_surface = reflection_surface
@@ -273,7 +281,8 @@ class PropagationPath():
 
         # add atmospheric absorption if enabled
         if self.atmos_absorp:
-            filters.append(AtmosphericAbsorptionFilter(fs=self.fs))
+            filters.append(AtmosphericAbsorptionFilter(**self.atmos_params,
+                                                       fs=self.fs))
 
         # add ground filter if surface is set (reflected path)
         if self.reflection_surface is not None:
