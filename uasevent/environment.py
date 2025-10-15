@@ -17,7 +17,6 @@ warnings.filterwarnings('error')
 class UASEventRenderer():
     '''
     Main propagation model for rendering of drone flight events.
-
     '''
     def __init__(
             self,
